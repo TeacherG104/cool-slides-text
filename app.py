@@ -9,15 +9,16 @@ app = FastAPI()
 def render_text(
     text: str = Query("Hello World"),
     color: str = Query("#ff0000"),
-    font_size: int = Query(120)
+    font_size: int = Query(120),
+    bg_color: str = Query("#ffffff")  # background color parameter
 ):
-    # Create blank transparent image
-    img = Image.new("RGBA", (800, 300), (255, 255, 255, 0))
+    # Create solid background image
+    img = Image.new("RGBA", (800, 300), bg_color)  # solid background instead of transparent
     draw = ImageDraw.Draw(img)
 
     # Try to load a font; fall back if missing
     try:
-        font = ImageFont.truetype("DejaVuSans.ttf", font_size)  # safer than arial.ttf
+        font = ImageFont.truetype("DejaVuSans.ttf", font_size)
     except:
         font = ImageFont.load_default()
 
@@ -35,4 +36,4 @@ def render_text(
 
 @app.get("/")
 def home():
-    return {"status": "Renderer is running. Use /render?text=Hello&color=%23ff0000"}
+    return {"status": "Renderer is running. Use /render?text=Hello&color=%23ff0000&bg_color=%23ffffff"}
