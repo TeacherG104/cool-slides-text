@@ -37,6 +37,6 @@ def render_text(
     img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
-    @app.get("/")
+@app.get("/")
 def home():
     return {"status": "Renderer is running. Use /render?text=Hello&color=%23ff0000"}
