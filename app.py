@@ -15,8 +15,11 @@ def render_text(
     img = Image.new("RGBA", (800, 300), (255, 255, 255, 0))
     draw = ImageDraw.Draw(img)
 
-    # Load a default font (system font or bundled TTF)
-    font = ImageFont.truetype("arial.ttf", font_size)
+    # Try to load a font; fall back if missing
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", font_size)  # safer than arial.ttf
+    except:
+        font = ImageFont.load_default()
 
     # Draw text centered
     w, h = draw.textsize(text, font=font)
@@ -24,6 +27,11 @@ def render_text(
     y = (img.height - h) // 2
     draw.text((x, y), text, font=font, fill=color)
 
+    # Return PNG
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
     # Return PNG
     buf = BytesIO()
     img.save(buf, format="PNG")
