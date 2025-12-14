@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from PIL import Image, ImageDraw, ImageFont, ImageColor
-import io, os
+import io
 
 app = FastAPI()
 
@@ -46,12 +46,10 @@ def render(
     width = text_width + padding * 2
     height = text_height + padding * 2
 
-    # Background
-    bg_rgba = hex_to_rgba(bg_color)
-    img = Image.new("RGBA", (width, height), bg_rgba)
-    draw = ImageDraw.Draw(img)
+    # Transparent layer for text
+    text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    text_draw = ImageDraw.Draw(text_layer)
 
-    # Gradient text rendering
     if grad_start and grad_end:
         start_rgb = ImageColor.getrgb(grad_start)
         end_rgb = ImageColor.getrgb(grad_end)
@@ -61,7 +59,7 @@ def render(
         mask_draw = ImageDraw.Draw(mask)
         mask_draw.text((padding, padding), text, font=font_obj, fill=255)
 
-        # Create gradient image
+        # Create gradient
         gradient = Image.new("RGBA", (width, height))
         grad_draw = ImageDraw.Draw(gradient)
         for y in range(height):
@@ -73,19 +71,21 @@ def render(
 
         # Apply mask so gradient only shows inside text
         gradient.putalpha(mask)
-
-        # Composite gradient text onto background
-        final_img = Image.alpha_composite(img, gradient)
+        text_layer = gradient
     else:
         # Solid color text
-        draw.text((padding, padding), text, font=font_obj, fill=color)
-        final_img = img
+        text_draw.text((padding, padding), text, font=font_obj, fill=color)
 
-    # Trim if requested
+    # Trim based on text pixels
     if trim:
-        bbox = final_img.getbbox()
+        bbox = text_layer.getbbox()
         if bbox:
-            final_img = final_img.crop(bbox)
+            text_layer = text_layer.crop(bbox)
+
+    # Composite onto background AFTER trimming
+    bg_rgba = hex_to_rgba(bg_color)
+    bg_img = Image.new("RGBA", text_layer.size, bg_rgba)
+    final_img = Image.alpha_composite(bg_img, text_layer)
 
     # Return PNG
     buf = io.BytesIO()
