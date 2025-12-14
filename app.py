@@ -19,11 +19,8 @@ def render(
     trim: bool = False,
     padding: int = 20
 ):
-    # Load a scalable font
-    try:
-        font = ImageFont.truetype("DejaVuSans.ttf", font_size)
-    except:
-        font = ImageFont.load_default()
+    # Always load a safe default font
+    font = ImageFont.load_default()
 
     # Measure text size
     dummy_img = Image.new("RGB", (1, 1))
