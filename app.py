@@ -13,21 +13,22 @@ def render(
     font_size: int = 24,
     trim: bool = False
 ):
-    # Load a font (make sure arial.ttf or another font file is available in your environment)
-    font = ImageFont.truetype("arial.ttf", font_size)
+    # Use default font to avoid missing file errors
+    try:
+        font = ImageFont.truetype("arial.ttf", font_size)
+    except:
+        font = ImageFont.load_default()
 
-    # Create a large enough canvas
-    img = Image.new("RGBA", (1000, 300), bg_color)
+    # Create canvas with solid background
+    img = Image.new("RGBA", (1000, 300), (255, 255, 255, 255))
     draw = ImageDraw.Draw(img)
     draw.text((10, 10), text, font=font, fill=color)
 
     if trim:
-        # Find the bounding box of non-background pixels
         bbox = img.getbbox()
         if bbox:
             img = img.crop(bbox)
 
-    # Return as PNG
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
