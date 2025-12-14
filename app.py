@@ -19,31 +19,25 @@ def render(
     trim: bool = False,
     padding: int = 20
 ):
-    # Always load a safe default font
-    font = ImageFont.load_default()
+    # Load scalable font
+    font = ImageFont.truetype("DejaVuSans.ttf", font_size)
 
-    # Measure text size
-    dummy_img = Image.new("RGB", (1, 1))
-    draw = ImageDraw.Draw(dummy_img)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
-
-    # Add padding
-    width = text_width + padding * 2
-    height = text_height + padding * 2
-
-    # Use chosen background color
-    bg_rgba = hex_to_rgba(bg_color)
-    img = Image.new("RGBA", (width, height), bg_rgba)
-    draw = ImageDraw.Draw(img)
+    # Transparent layer for text
+    temp_img = Image.new("RGBA", (2000, 500), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(temp_img)
     draw.text((padding, padding), text, font=font, fill=color)
 
-    if trim:
-        bbox = img.getbbox()
-        if bbox:
-            img = img.crop(bbox)
+    # Crop to text bounding box
+    bbox = temp_img.getbbox()
+    if trim and bbox:
+        temp_img = temp_img.crop(bbox)
+
+    # Add background
+    bg_rgba = hex_to_rgba(bg_color)
+    bg_img = Image.new("RGBA", temp_img.size, bg_rgba)
+    final_img = Image.alpha_composite(bg_img, temp_img)
 
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    final_img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
