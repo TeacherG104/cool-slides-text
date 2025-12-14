@@ -11,18 +11,27 @@ def render(
     color: str = "#000000",
     bg_color: str = "#ffffff",
     font_size: int = 24,
-    trim: bool = False
+    trim: bool = False,
+    padding: int = 20
 ):
-    # Use default font to avoid missing file errors
     try:
         font = ImageFont.truetype("arial.ttf", font_size)
     except:
         font = ImageFont.load_default()
 
-    # Create canvas with solid background
-    img = Image.new("RGBA", (1000, 300), (255, 255, 255, 255))
+    # Measure text size
+    dummy_img = Image.new("RGBA", (1, 1))
+    draw = ImageDraw.Draw(dummy_img)
+    text_width, text_height = draw.textsize(text, font=font)
+
+    # Add padding around text
+    width = text_width + padding * 2
+    height = text_height + padding * 2
+
+    # Create canvas sized to text
+    img = Image.new("RGBA", (width, height), bg_color)
     draw = ImageDraw.Draw(img)
-    draw.text((10, 10), text, font=font, fill=color)
+    draw.text((padding, padding), text, font=font, fill=color)
 
     if trim:
         bbox = img.getbbox()
