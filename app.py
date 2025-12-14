@@ -64,25 +64,38 @@ def render(
     width = text_width + padding * 2
     height = text_height + padding * 2
 
-    # Transparent layer for text
+    # Base image for stacking layers
+    base = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+
+    # --- Glow effect ---
+    if glow_color and int(glow_size) > 0:
+        mask = Image.new("L", (width, height), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.text((padding, padding), text, font=font_obj, fill=255)
+
+        glow_layer = Image.new("RGBA", (width, height), hex_to_rgba(glow_color))
+        glow_layer.putalpha(mask)
+        glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=int(glow_size)))
+
+        base = Image.alpha_composite(base, glow_layer)
+
+    # --- Outline effect ---
+    if outline_color and int(outline_width) > 0:
+        outline_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        outline_draw = ImageDraw.Draw(outline_layer)
+        for dx in range(-int(outline_width), int(outline_width)+1):
+            for dy in range(-int(outline_width), int(outline_width)+1):
+                outline_draw.text((padding+dx, padding+dy), text, font=font_obj, fill=outline_color)
+        base = Image.alpha_composite(base, outline_layer)
+
+    # --- Gradient or solid fill ---
     text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     text_draw = ImageDraw.Draw(text_layer)
 
-    # --- Outline effect ---
-    if outline_color and outline_width > 0:
-        outline_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        outline_draw = ImageDraw.Draw(outline_layer)
-        for dx in range(-outline_width, outline_width+1):
-            for dy in range(-outline_width, outline_width+1):
-                outline_draw.text((padding+dx, padding+dy), text, font=font_obj, fill=outline_color)
-        text_layer = Image.alpha_composite(text_layer, outline_layer)
-
-    # --- Gradient or solid fill ---
     if grad_start and grad_end and grad_shape:
         start_rgb = ImageColor.getrgb(grad_start)
         end_rgb = ImageColor.getrgb(grad_end)
 
-        # Create mask for text
         mask = Image.new("L", (width, height), 0)
         mask_draw = ImageDraw.Draw(mask)
         mask_draw.text((padding, padding), text, font=font_obj, fill=255)
@@ -127,50 +140,25 @@ def render(
                     gradient.putpixel((x,y),(r,g,b,255))
 
         gradient.putalpha(mask)
-        text_layer = Image.alpha_composite(text_layer, gradient)
+        text_layer = gradient
     else:
-        # Solid color text
         text_draw.text((padding, padding), text, font=font_obj, fill=color)
 
-# --- Glow effect ---
-if glow_color and int(glow_size) > 0:
-    mask = Image.new("L", (width, height), 0)
-    mask_draw = ImageDraw.Draw(mask)
-    mask_draw.text((padding, padding), text, font=font_obj, fill=255)
+    base = Image.alpha_composite(base, text_layer)
 
-    glow_layer = Image.new("RGBA", (width, height), hex_to_rgba(glow_color))
-    glow_layer.putalpha(mask)
-    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=int(glow_size)))
+    # Trim based on text pixels
+    if trim:
+        bbox = base.getbbox()
+        if bbox:
+            base = base.crop(bbox)
 
-    # Put glow behind everything
-    base = Image.new("RGBA", (width, height), (0,0,0,0))
-    base = Image.alpha_composite(base, glow_layer)
-else:
-    base = Image.new("RGBA", (width, height), (0,0,0,0))
-
-# --- Outline effect ---
-if outline_color and int(outline_width) > 0:
-    outline_layer = Image.new("RGBA", (width, height), (0,0,0,0))
-    outline_draw = ImageDraw.Draw(outline_layer)
-    for dx in range(-int(outline_width), int(outline_width)+1):
-        for dy in range(-int(outline_width), int(outline_width)+1):
-            outline_draw.text((padding+dx, padding+dy), text, font=font_obj, fill=outline_color)
-    base = Image.alpha_composite(base, outline_layer)
-
-# --- Text fill (gradient or solid) ---
-text_layer = Image.new("RGBA", (width, height), (0,0,0,0))
-text_draw = ImageDraw.Draw(text_layer)
-text_draw.text((padding, padding), text, font=font_obj, fill=color)
-base = Image.alpha_composite(base, text_layer)
-
-text_layer = base
     # Composite onto background AFTER trimming
     if transparent:
-        final_img = text_layer
+        final_img = base
     else:
         bg_rgba = hex_to_rgba(bg_color)
-        bg_img = Image.new("RGBA", text_layer.size, bg_rgba)
-        final_img = Image.alpha_composite(bg_img, text_layer)
+        bg_img = Image.new("RGBA", base.size, bg_rgba)
+        final_img = Image.alpha_composite(bg_img, base)
 
     # Return PNG
     buf = io.BytesIO()
