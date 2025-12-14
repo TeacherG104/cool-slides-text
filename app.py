@@ -5,12 +5,18 @@ import io, math
 
 app = FastAPI()
 
-# Map sidebar dropdown values to bundled font files
+# Map sidebar dropdown values to your uploaded font files
 FONTS = {
-    "sans": "fonts/DejaVuSans.ttf",
-    "serif": "fonts/DejaVuSerif.ttf",
-    "handwriting": "fonts/Pacifico-Regular.ttf",
-    "display": "fonts/Lobster-Regular.ttf"
+    "henny": "fonts/HennyPenny-Regular.ttf",
+    "honk": "fonts/Honk-Regular-VariableFont_MORF,SHLN.ttf",
+    "metamorphous": "fonts/Metamorphous-Regular.ttf",
+    "monoton": "fonts/Monoton-Regular.ttf",
+    "moolahlah": "fonts/MooLahLah-Regular.ttf",
+    "mysteryquest": "fonts/MysteryQuest-Regular.ttf",
+    "nabla": "fonts/Nabla-Regular-VariableFont_EDPT,EHLT.ttf",
+    "pacifico": "fonts/Pacifico-Regular.ttf",
+    "transformers": "fonts/Transformers Movie.ttf",
+    "uncial": "fonts/UncialAntiqua-Regular.ttf"
 }
 
 def hex_to_rgba(hex_color: str):
@@ -19,7 +25,9 @@ def hex_to_rgba(hex_color: str):
 
 def load_font(name: str, size: int):
     """Load a font safely, fallback to default if missing."""
-    path = FONTS.get(name, FONTS["sans"])
+    path = FONTS.get(name)
+    if not path:
+        return ImageFont.load_default()
     try:
         return ImageFont.truetype(path, size)
     except OSError:
@@ -33,7 +41,7 @@ def render(
     font_size: int = 24,
     trim: bool = False,
     padding: int = 20,
-    font: str = "sans",
+    font: str = "henny",
     grad_start: str = None,
     grad_end: str = None,
     grad_shape: str = None,
