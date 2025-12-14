@@ -1,114 +1,132 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <style>
-      body { font-family: Arial, sans-serif; padding: 10px; }
-      input, button, select { margin: 5px 0; }
-      #previewImage { max-width: 100%; border: 1px solid #ccc; margin-top: 10px; }
-      #status { margin-top: 10px; color: green; }
-      #fontSizeLabel { margin-top: 10px; display: block; }
-    </style>
-  </head>
-  <body>
-    <input id="text" placeholder="Enter text">
-    <br>
-    <label>Text color: <input id="color" type="color" value="#000000"></label>
-    <br>
-    <label>Background color: <input id="bg" type="color" value="#ffffff"></label>
-    <br>
-    <label id="fontSizeLabel">Font size: 
-      <input id="fontSize" type="range" min="12" max="72" value="24">
-      <span id="fontSizeValue">24</span>px
-    </label>
-    <br>
-    <label><input id="trimToggle" type="checkbox"> Trim background to text size</label>
-    <br>
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from PIL import Image, ImageDraw, ImageFont, ImageColor
+import io, math
 
-    <!-- Font dropdown -->
-    <label>Font:
-      <select id="fontSelect">
-        <option value="sans">Sans</option>
-        <option value="serif">Serif</option>
-        <option value="handwriting">Handwriting</option>
-        <option value="display">Display</option>
-      </select>
-    </label>
-    <br>
+app = FastAPI()
 
-    <!-- Gradient color pickers -->
-    <label>Gradient start: <input id="gradStart" type="color" value="#ff0000"></label>
-    <br>
-    <label>Gradient end: <input id="gradEnd" type="color" value="#0000ff"></label>
-    <br>
+# Map sidebar dropdown values to bundled font files
+FONTS = {
+    "sans": "fonts/DejaVuSans.ttf",
+    "serif": "fonts/DejaVuSerif.ttf",
+    "handwriting": "fonts/Pacifico-Regular.ttf",
+    "display": "fonts/Lobster-Regular.ttf"
+}
 
-    <!-- Transparent background toggle -->
-    <label><input id="transparentToggle" type="checkbox"> Transparent background</label>
-    <br>
+def hex_to_rgba(hex_color: str):
+    """Convert hex string (#rrggbb) to RGBA tuple."""
+    return ImageColor.getrgb(hex_color) + (255,)
 
-    <button id="insertBtn">Insert into Slide</button>
+def load_font(name: str, size: int):
+    """Load a font safely, fallback to default if missing."""
+    path = FONTS.get(name, FONTS["sans"])
+    try:
+        return ImageFont.truetype(path, size)
+    except OSError:
+        return ImageFont.load_default()
 
-    <img id="previewImage">
-    <div id="status"></div>
+@app.get("/render")
+def render(
+    text: str,
+    color: str = "#000000",
+    bg_color: str = "#ffffff",
+    font_size: int = 24,
+    trim: bool = False,
+    padding: int = 20,
+    font: str = "sans",
+    grad_start: str = None,
+    grad_end: str = None,
+    grad_shape: str = None,
+    transparent: bool = False
+):
+    # Load chosen font
+    font_obj = load_font(font, font_size)
 
-    <script>
-      function buildUrl() {
-        const text = document.getElementById('text').value;
-        const color = document.getElementById('color').value;
-        const bg = document.getElementById('bg').value;
-        const fontSize = document.getElementById('fontSize').value;
-        const trim = document.getElementById('trimToggle').checked ? "true" : "false";
-        const font = document.getElementById('fontSelect').value;
-        const gradStart = document.getElementById('gradStart').value;
-        const gradEnd = document.getElementById('gradEnd').value;
-        const transparent = document.getElementById('transparentToggle').checked ? "true" : "false";
+    # Measure text size
+    dummy_img = Image.new("RGB", (1, 1))
+    draw = ImageDraw.Draw(dummy_img)
+    bbox = draw.textbbox((0, 0), text, font=font_obj)
+    text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-        return "https://cool-slides-text.onrender.com/render?"
-          + "text=" + encodeURIComponent(text)
-          + "&color=" + encodeURIComponent(color)
-          + "&bg_color=" + encodeURIComponent(bg)
-          + "&font_size=" + encodeURIComponent(fontSize)
-          + "&trim=" + trim
-          + "&font=" + encodeURIComponent(font)
-          + "&grad_start=" + encodeURIComponent(gradStart)
-          + "&grad_end=" + encodeURIComponent(gradEnd)
-          + "&transparent=" + transparent;
-      }
+    # Add padding
+    width = text_width + padding * 2
+    height = text_height + padding * 2
 
-      function updatePreview() {
-        const url = buildUrl();
-        document.getElementById('previewImage').src = url;
-        window.latestImageUrl = url;
-        document.getElementById('status').textContent = "Preview updated.";
-      }
+    # Transparent layer for text
+    text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    text_draw = ImageDraw.Draw(text_layer)
 
-      function insertIntoSlide() {
-        if (!window.latestImageUrl) {
-          alert("Generate a preview first!");
-          return;
-        }
-        document.getElementById('status').textContent = "Inserting into slide...";
-        google.script.run
-          .withSuccessHandler(() => {
-            document.getElementById('status').textContent = "Image inserted!";
-          })
-          .insertImageFromUrl(window.latestImageUrl);
-      }
+    # Gradient rendering only if shape is chosen
+    if grad_start and grad_end and grad_shape:
+        start_rgb = ImageColor.getrgb(grad_start)
+        end_rgb = ImageColor.getrgb(grad_end)
 
-      document.addEventListener("DOMContentLoaded", function() {
-        document.getElementById('text').addEventListener('input', updatePreview);
-        document.getElementById('color').addEventListener('input', updatePreview);
-        document.getElementById('bg').addEventListener('input', updatePreview);
-        document.getElementById('fontSize').addEventListener('input', function() {
-          document.getElementById('fontSizeValue').textContent = this.value;
-          updatePreview();
-        });
-        document.getElementById('trimToggle').addEventListener('change', updatePreview);
-        document.getElementById('fontSelect').addEventListener('change', updatePreview);
-        document.getElementById('gradStart').addEventListener('input', updatePreview);
-        document.getElementById('gradEnd').addEventListener('input', updatePreview);
-        document.getElementById('transparentToggle').addEventListener('change', updatePreview);
-        document.getElementById('insertBtn').addEventListener('click', insertIntoSlide);
-      });
-    </script>
-  </body>
-</html>
+        # Create mask for text
+        mask = Image.new("L", (width, height), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.text((padding, padding), text, font=font_obj, fill=255)
+
+        gradient = Image.new("RGBA", (width, height))
+        grad_draw = ImageDraw.Draw(gradient)
+
+        if grad_shape == "vertical":
+            for y in range(height):
+                ratio = y / height
+                r = int(start_rgb[0]*(1-ratio) + end_rgb[0]*ratio)
+                g = int(start_rgb[1]*(1-ratio) + end_rgb[1]*ratio)
+                b = int(start_rgb[2]*(1-ratio) + end_rgb[2]*ratio)
+                grad_draw.line([(0,y),(width,y)], fill=(r,g,b,255))
+
+        elif grad_shape == "horizontal_left":
+            for x in range(width):
+                ratio = x / width
+                r = int(start_rgb[0]*(1-ratio) + end_rgb[0]*ratio)
+                g = int(start_rgb[1]*(1-ratio) + end_rgb[1]*ratio)
+                b = int(start_rgb[2]*(1-ratio) + end_rgb[2]*ratio)
+                grad_draw.line([(x,0),(x,height)], fill=(r,g,b,255))
+
+        elif grad_shape == "horizontal_right":
+            for x in range(width):
+                ratio = 1 - (x / width)
+                r = int(start_rgb[0]*(1-ratio) + end_rgb[0]*ratio)
+                g = int(start_rgb[1]*(1-ratio) + end_rgb[1]*ratio)
+                b = int(start_rgb[2]*(1-ratio) + end_rgb[2]*ratio)
+                grad_draw.line([(x,0),(x,height)], fill=(r,g,b,255))
+
+        elif grad_shape == "radial":
+            cx, cy = width//2, height//2
+            max_dist = math.sqrt(cx**2 + cy**2)
+            for y in range(height):
+                for x in range(width):
+                    dist = math.sqrt((x-cx)**2 + (y-cy)**2)
+                    ratio = min(dist/max_dist, 1)
+                    r = int(start_rgb[0]*(1-ratio) + end_rgb[0]*ratio)
+                    g = int(start_rgb[1]*(1-ratio) + end_rgb[1]*ratio)
+                    b = int(start_rgb[2]*(1-ratio) + end_rgb[2]*ratio)
+                    gradient.putpixel((x,y),(r,g,b,255))
+
+        gradient.putalpha(mask)
+        text_layer = gradient
+    else:
+        # Solid color text
+        text_draw.text((padding, padding), text, font=font_obj, fill=color)
+
+    # Trim based on text pixels
+    if trim:
+        bbox = text_layer.getbbox()
+        if bbox:
+            text_layer = text_layer.crop(bbox)
+
+    # Composite onto background AFTER trimming
+    if transparent:
+        final_img = text_layer
+    else:
+        bg_rgba = hex_to_rgba(bg_color)
+        bg_img = Image.new("RGBA", text_layer.size, bg_rgba)
+        final_img = Image.alpha_composite(bg_img, text_layer)
+
+    # Return PNG
+    buf = io.BytesIO()
+    final_img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
