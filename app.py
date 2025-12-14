@@ -1,43 +1,34 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
+import io
 
 app = FastAPI()
 
 @app.get("/render")
-def render_text(
-    text: str = Query("Hello World"),
-    color: str = Query("#ff0000"),
-    font_size: int = Query(120),
-    bg_color: str = Query("#ffffff")  # background color parameter
+def render(
+    text: str,
+    color: str = "#000000",
+    bg_color: str = "#ffffff",
+    font_size: int = 24,
+    trim: bool = False
 ):
-    # Create solid background image
-    img = Image.new("RGBA", (800, 300), bg_color)
+    # Load a font (make sure arial.ttf or another font file is available in your environment)
+    font = ImageFont.truetype("arial.ttf", font_size)
+
+    # Create a large enough canvas
+    img = Image.new("RGBA", (1000, 300), bg_color)
     draw = ImageDraw.Draw(img)
+    draw.text((10, 10), text, font=font, fill=color)
 
-    # Try to load a font; fall back if missing
-    try:
-        font = ImageFont.truetype("DejaVuSans.ttf", font_size)
-    except Exception:
-        font = ImageFont.load_default()
+    if trim:
+        # Find the bounding box of non-background pixels
+        bbox = img.getbbox()
+        if bbox:
+            img = img.crop(bbox)
 
-    # Measure text size using textbbox (modern Pillow)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
-
-    # Center text
-    x = (img.width - w) // 2
-    y = (img.height - h) // 2
-    draw.text((x, y), text, font=font, fill=color)
-
-    # Return PNG
-    buf = BytesIO()
+    # Return as PNG
+    buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
-
-@app.get("/")
-def home():
-    return {"status": "Renderer is running. Use /render?text=Hello&color=%23ff0000&bg_color=%23ffffff"}
