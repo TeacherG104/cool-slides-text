@@ -17,6 +17,14 @@ def hex_to_rgba(hex_color: str):
     """Convert hex string (#rrggbb) to RGBA tuple."""
     return ImageColor.getrgb(hex_color) + (255,)
 
+def load_font(name: str, size: int):
+    """Load a font safely, fallback to default if missing."""
+    path = FONTS.get(name, FONTS["sans"])
+    try:
+        return ImageFont.truetype(path, size)
+    except OSError:
+        return ImageFont.load_default()
+
 @app.get("/render")
 def render(
     text: str,
@@ -27,14 +35,11 @@ def render(
     padding: int = 20,
     font: str = "sans",
     grad_start: str = None,
-    grad_end: str = None
+    grad_end: str = None,
+    transparent: bool = False
 ):
-    # Load chosen font (fallback to default if missing)
-    font_path = FONTS.get(font, FONTS["sans"])
-    try:
-        font_obj = ImageFont.truetype(font_path, font_size)
-    except Exception:
-        font_obj = ImageFont.load_default()
+    # Load chosen font
+    font_obj = load_font(font, font_size)
 
     # Measure text size
     dummy_img = Image.new("RGB", (1, 1))
@@ -83,9 +88,12 @@ def render(
             text_layer = text_layer.crop(bbox)
 
     # Composite onto background AFTER trimming
-    bg_rgba = hex_to_rgba(bg_color)
-    bg_img = Image.new("RGBA", text_layer.size, bg_rgba)
-    final_img = Image.alpha_composite(bg_img, text_layer)
+    if transparent:
+        final_img = text_layer
+    else:
+        bg_rgba = hex_to_rgba(bg_color)
+        bg_img = Image.new("RGBA", text_layer.size, bg_rgba)
+        final_img = Image.alpha_composite(bg_img, text_layer)
 
     # Return PNG
     buf = io.BytesIO()
