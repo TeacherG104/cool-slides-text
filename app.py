@@ -132,14 +132,14 @@ def render(
         # Solid color text
         text_draw.text((padding, padding), text, font=font_obj, fill=color)
 
-    # --- Glow effect ---
+        # --- Glow effect ---
     if glow_color and glow_size > 0:
         # Create mask of text
         mask = Image.new("L", (width, height), 0)
         mask_draw = ImageDraw.Draw(mask)
         mask_draw.text((padding, padding), text, font=font_obj, fill=255)
 
-        # Expand mask slightly before blur
+        # Expand mask outward before blur
         expanded = mask.filter(ImageFilter.MaxFilter(glow_size*2+1))
 
         # Tint with glow color
@@ -150,13 +150,10 @@ def render(
         glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=glow_size))
 
         # Composite glow behind text
-        text_layer = Image.alpha_composite(glow_layer, text_layer)
-
-    # Trim based on text pixels
-    if trim:
-        bbox = text_layer.getbbox()
-        if bbox:
-            text_layer = text_layer.crop(bbox)
+        combined = Image.new("RGBA", (width, height), (0,0,0,0))
+        combined = Image.alpha_composite(combined, glow_layer)
+        combined = Image.alpha_composite(combined, text_layer)
+        text_layer = combined
 
     # Composite onto background AFTER trimming
     if transparent:
