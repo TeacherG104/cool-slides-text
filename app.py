@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from PIL import Image, ImageDraw, ImageFont, ImageColor
+from PIL import Image, ImageDraw, ImageFont, ImageColor, ImageFilter
 import io, math
 
 app = FastAPI()
@@ -45,7 +45,11 @@ def render(
     grad_start: str = None,
     grad_end: str = None,
     grad_shape: str = None,
-    transparent: bool = False
+    transparent: bool = False,
+    glow_color: str = None,
+    glow_size: int = 0,
+    outline_color: str = None,
+    outline_width: int = 0
 ):
     # Load chosen font
     font_obj = load_font(font, font_size)
@@ -64,7 +68,16 @@ def render(
     text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     text_draw = ImageDraw.Draw(text_layer)
 
-    # Gradient rendering only if shape is chosen
+    # --- Outline effect ---
+    if outline_color and outline_width > 0:
+        outline_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        outline_draw = ImageDraw.Draw(outline_layer)
+        for dx in range(-outline_width, outline_width+1):
+            for dy in range(-outline_width, outline_width+1):
+                outline_draw.text((padding+dx, padding+dy), text, font=font_obj, fill=outline_color)
+        text_layer = Image.alpha_composite(text_layer, outline_layer)
+
+    # --- Gradient or solid fill ---
     if grad_start and grad_end and grad_shape:
         start_rgb = ImageColor.getrgb(grad_start)
         end_rgb = ImageColor.getrgb(grad_end)
@@ -114,10 +127,20 @@ def render(
                     gradient.putpixel((x,y),(r,g,b,255))
 
         gradient.putalpha(mask)
-        text_layer = gradient
+        text_layer = Image.alpha_composite(text_layer, gradient)
     else:
         # Solid color text
         text_draw.text((padding, padding), text, font=font_obj, fill=color)
+
+    # --- Glow effect ---
+    if glow_color and glow_size > 0:
+        mask = Image.new("L", (width, height), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.text((padding, padding), text, font=font_obj, fill=255)
+        glow_layer = Image.new("RGBA", (width, height), hex_to_rgba(glow_color))
+        glow_layer.putalpha(mask)
+        glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=glow_size))
+        text_layer = Image.alpha_composite(glow_layer, text_layer)
 
     # Trim based on text pixels
     if trim:
