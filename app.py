@@ -102,7 +102,7 @@ def render(
     # --- Gradient fill ---
     if grad_start and grad_end and grad_shape:
         start_rgb = ImageColor.getrgb(grad_start)
-        end_rgb = ImageColor.getrgb(gradEnd)
+        end_rgb   = ImageColor.getrgb(grad_end)   # <-- correct variable name
 
         fill_mask = Image.new("L", (width, height), 0)
         ImageDraw.Draw(fill_mask).text((padding, padding), text, font=font_obj, fill=255)
