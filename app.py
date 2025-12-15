@@ -171,3 +171,33 @@ def render(
     final_img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+    @app.post("/fraction")
+async def fraction_endpoint(request: Request):
+    data = await request.json()
+    numerator = data.get("numerator", "")
+    denominator = data.get("denominator", "")
+    num_color = data.get("numColor", "#000000")
+    den_color = data.get("denColor", "#000000")
+
+    # Use a default font for fractions
+    font = ImageFont.truetype("fonts/HennyPenny-Regular.ttf", 64)
+
+    width, height = 300, 200
+    img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Numerator
+    w_num, h_num = draw.textsize(numerator, font=font)
+    draw.text(((width - w_num) // 2, 20), numerator, fill=num_color, font=font)
+
+    # Divider line
+    draw.line((20, height // 2, width - 20, height // 2), fill="black", width=4)
+
+    # Denominator
+    w_den, h_den = draw.textsize(denominator, font=font)
+    draw.text(((width - w_den) // 2, height // 2 + 20), denominator, fill=den_color, font=font)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
