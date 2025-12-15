@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from PIL import Image, ImageDraw, ImageFont, ImageColor, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageColor
 import io, math
+import numpy as np
+from scipy.ndimage import distance_transform_edt
 
 app = FastAPI()
 
@@ -48,6 +50,7 @@ def render(
     transparent: bool = False,
     glow_color: str = None,
     glow_size: int = 0,
+    glow_falloff: float = 2.0,   # new parameter
     outline_color: str = None,
     outline_width: int = 0
 ):
@@ -67,38 +70,42 @@ def render(
     # Base image for stacking layers
     base = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
-    # --- Glow effect ---
+    # --- Glow with falloff ---
     if glow_color and int(glow_size) > 0:
         mask = Image.new("L", (width, height), 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.text((padding, padding), text, font=font_obj, fill=255)
+        ImageDraw.Draw(mask).text((padding, padding), text, font=font_obj, fill=255)
 
-        glow_layer = Image.new("RGBA", (width, height), hex_to_rgba(glow_color))
-        glow_layer.putalpha(mask)
-        glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=int(glow_size)))
+        mask_np = np.array(mask)
+        dist = distance_transform_edt(mask_np == 0)
 
+        falloff = np.clip(1 - (dist / int(glow_size)), 0, 1)
+        falloff = falloff ** float(glow_falloff)  # exponent controls steepness
+        alpha = (falloff * 255).astype(np.uint8)
+
+        glow_layer = Image.new("RGBA", (width, height), ImageColor.getrgb(glow_color) + (0,))
+        glow_layer.putalpha(Image.fromarray(alpha))
         base = Image.alpha_composite(base, glow_layer)
 
-    # --- Outline effect ---
-    if outline_color and int(outline_width) > 0:
-        outline_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        outline_draw = ImageDraw.Draw(outline_layer)
-        for dx in range(-int(outline_width), int(outline_width)+1):
-            for dy in range(-int(outline_width), int(outline_width)+1):
-                outline_draw.text((padding+dx, padding+dy), text, font=font_obj, fill=outline_color)
-        base = Image.alpha_composite(base, outline_layer)
-
-    # --- Gradient or solid fill ---
+    # --- Outline + fill (solid text) ---
+    outline_px = int(outline_width) if outline_color else 0
     text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     text_draw = ImageDraw.Draw(text_layer)
+    text_draw.text(
+        (padding, padding),
+        text,
+        font=font_obj,
+        fill=color,
+        stroke_width=outline_px,
+        stroke_fill=outline_color if outline_px > 0 else None
+    )
 
+    # --- Gradient fill ---
     if grad_start and grad_end and grad_shape:
         start_rgb = ImageColor.getrgb(grad_start)
-        end_rgb = ImageColor.getrgb(grad_end)
+        end_rgb = ImageColor.getrgb(gradEnd)
 
-        mask = Image.new("L", (width, height), 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.text((padding, padding), text, font=font_obj, fill=255)
+        fill_mask = Image.new("L", (width, height), 0)
+        ImageDraw.Draw(fill_mask).text((padding, padding), text, font=font_obj, fill=255)
 
         gradient = Image.new("RGBA", (width, height))
         grad_draw = ImageDraw.Draw(gradient)
@@ -139,24 +146,23 @@ def render(
                     b = int(start_rgb[2]*(1-ratio) + end_rgb[2]*ratio)
                     gradient.putpixel((x,y),(r,g,b,255))
 
-        gradient.putalpha(mask)
-        text_layer = gradient
+        gradient.putalpha(fill_mask)
+        base = Image.alpha_composite(base, text_layer)   # outline
+        base = Image.alpha_composite(base, gradient)     # gradient fill
     else:
-        text_draw.text((padding, padding), text, font=font_obj, fill=color)
+        base = Image.alpha_composite(base, text_layer)
 
-    base = Image.alpha_composite(base, text_layer)
-
-    # Trim based on text pixels
+    # Trim
     if trim:
         bbox = base.getbbox()
         if bbox:
             base = base.crop(bbox)
 
-    # Composite onto background AFTER trimming
+    # Background composite
     if transparent:
         final_img = base
     else:
-        bg_rgba = hex_to_rgba(bg_color)
+        bg_rgba = ImageColor.getrgb(bg_color) + (255,)
         bg_img = Image.new("RGBA", base.size, bg_rgba)
         final_img = Image.alpha_composite(bg_img, base)
 
