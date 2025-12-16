@@ -10,7 +10,6 @@ def load_font(font_name: str = "Arial", size: int = 64):
     try:
         return ImageFont.truetype(f"{font_name}.ttf", size)
     except Exception:
-        # Fallback to default PIL font if custom font not found
         return ImageFont.load_default()
 
 # Utility: render text into a PNG
@@ -19,8 +18,12 @@ def render_text_image(text: str, color: str, font_name: str):
     width, height = 600, 200
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(img)
-    w, h = draw.textsize(text, font=font_obj)
+
+    bbox = draw.textbbox((0, 0), text, font=font_obj)
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
     draw.text(((width - w) // 2, (height - h) // 2), text, fill=color, font=font_obj)
+
     return img
 
 # Utility: render fraction into a PNG
@@ -31,14 +34,16 @@ def render_fraction_image(numerator: str, denominator: str, numColor: str, denCo
     draw = ImageDraw.Draw(img)
 
     # Numerator
-    w_num, h_num = draw.textsize(numerator, font=font_obj)
+    bbox_num = draw.textbbox((0, 0), numerator, font=font_obj)
+    w_num = bbox_num[2] - bbox_num[0]
     draw.text(((width - w_num) // 2, 20), numerator, fill=numColor, font=font_obj)
 
     # Divider line
     draw.line((20, height // 2, width - 20, height // 2), fill="black", width=4)
 
     # Denominator
-    w_den, h_den = draw.textsize(denominator, font=font_obj)
+    bbox_den = draw.textbbox((0, 0), denominator, font=font_obj)
+    w_den = bbox_den[2] - bbox_den[0]
     draw.text(((width - w_den) // 2, height // 2 + 20), denominator, fill=denColor, font=font_obj)
 
     return img
