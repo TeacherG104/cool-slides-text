@@ -202,3 +202,23 @@ async def fraction_endpoint(request: Request):
     img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
+
+@app.get("/fraction")
+def fraction_preview(numerator: str, denominator: str, numColor: str = "#000000", denColor: str = "#000000"):
+    font_obj = load_font("henny", 64)
+    width, height = 300, 200
+    img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+
+    w_num, h_num = draw.textsize(numerator, font=font_obj)
+    draw.text(((width - w_num) // 2, 20), numerator, fill=numColor, font=font_obj)
+
+    draw.line((20, height // 2, width - 20, height // 2), fill="black", width=4)
+
+    w_den, h_den = draw.textsize(denominator, font=font_obj)
+    draw.text(((width - w_den) // 2, height // 2 + 20), denominator, fill=denColor, font=font_obj)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
