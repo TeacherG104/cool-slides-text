@@ -102,7 +102,7 @@ def render(
     # --- Gradient fill ---
     if grad_start and grad_end and grad_shape:
         start_rgb = ImageColor.getrgb(grad_start)
-        end_rgb   = ImageColor.getrgb(grad_end)   # <-- correct variable name
+        end_rgb   = ImageColor.getrgb(grad_end)
 
         fill_mask = Image.new("L", (width, height), 0)
         ImageDraw.Draw(fill_mask).text((padding, padding), text, font=font_obj, fill=255)
@@ -171,7 +171,9 @@ def render(
     final_img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
-    @app.post("/fraction")
+
+
+@app.post("/fraction")
 async def fraction_endpoint(request: Request):
     data = await request.json()
     numerator = data.get("numerator", "")
@@ -179,25 +181,24 @@ async def fraction_endpoint(request: Request):
     num_color = data.get("numColor", "#000000")
     den_color = data.get("denColor", "#000000")
 
-    # Use a default font for fractions
-    font = ImageFont.truetype("fonts/HennyPenny-Regular.ttf", 64)
+    font_obj = load_font("henny", 64)
 
     width, height = 300, 200
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(img)
 
     # Numerator
-    w_num, h_num = draw.textsize(numerator, font=font)
-    draw.text(((width - w_num) // 2, 20), numerator, fill=num_color, font=font)
+    w_num, h_num = draw.textsize(numerator, font=font_obj)
+    draw.text(((width - w_num) // 2, 20), numerator, fill=num_color, font=font_obj)
 
     # Divider line
     draw.line((20, height // 2, width - 20, height // 2), fill="black", width=4)
 
     # Denominator
-    w_den, h_den = draw.textsize(denominator, font=font)
-    draw.text(((width - w_den) // 2, height // 2 + 20), denominator, fill=den_color, font=font)
+    w_den, h_den = draw.textsize(denominator, font=font_obj)
+    draw.text(((width - w_den) // 2, height // 2 + 20), denominator, fill=den_color, font=font_obj)
 
-    buf = io.BytesIO()
+    buf = io.Bytes
     img.save(buf, format="PNG")
     buf.seek(0)
     return StreamingResponse(buf, media_type="image/png")
