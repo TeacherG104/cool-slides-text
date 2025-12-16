@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from PIL import Image, ImageDraw, ImageFont, ImageColor
 import io, math
