@@ -24,6 +24,10 @@ def render_text_image(text: str, color: str, font_name: str):
 
     return img
 
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
+
 @app.get("/render")
 def render_preview(
     text: str = Query(...),
