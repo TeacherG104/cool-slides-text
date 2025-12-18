@@ -94,11 +94,12 @@ def render_text_image(text: str, font_name: str, size: int,
                       outline_color: str = None, outline_size: float = 0.0):
     font_obj = load_font(font_name, size)
 
-    # Measure text
+    # Measure text with extra padding to capture descenders
     tmp_img = Image.new("L", (1,1))
     tmp_draw = ImageDraw.Draw(tmp_img)
     bbox = tmp_draw.textbbox((0,0), text, font=font_obj)
     w, h = bbox[2]-bbox[0], bbox[3]-bbox[1]
+    h += int(size * 0.3)  # extra vertical padding
 
     padding = size // 2
     width, height = w + padding*2, h + padding*2
@@ -115,9 +116,10 @@ def render_text_image(text: str, font_name: str, size: int,
         glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
         alpha = glow_img.split()[3].point(lambda p: int(p*glow_intensity))
         glow_img.putalpha(alpha)
-        img = Image.alpha_composite(img, glow_img)
+        base = Image.alpha_composite(img, glow_img)
+        img = base
 
-    # Gradient or solid fill
+    # Gradient anchored to text bbox
     if gradient_colors and gradient_type != "none":
         gradient = make_gradient(w, h, gradient_colors, gradient_type)
         text_area = Image.new("RGBA", (w, h), (255,255,255,0))
