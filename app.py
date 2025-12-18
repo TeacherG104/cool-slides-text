@@ -108,89 +108,36 @@ def render_text_image(text: str, font_name: str, size: int,
 
     x, y = padding, padding
 
-    # --- Outline first ---
-    if outline_color and outline_size > 0:
-        outline_draw = ImageDraw.Draw(img)
-        steps = int(outline_size)
-        for dx in range(-steps, steps+1):
-            for dy in range(-steps, steps+1):
-                if dx!=0 or dy!=0:
-                    outline_draw.text((x+dx,y+dy), text, font=font_obj, fill=outline_color)
-
-    # --- Glow behind text ---
+    # --- Glow (original setup you liked) ---
     if glow_color and glow_size > 0:
-        glow_layer = Image.new("RGBA", img.size, (255,255,255,0))
-        for i in range(5):  # more layers for intensity
-            radius = int(glow_size * (i+1)/5)
-            alpha_scale = 1.0 - (i/5)
-            tmp = Image.new("RGBA", img.size, (255,255,255,0))
-            draw = ImageDraw.Draw(tmp)
-            draw.text((x,y), text, font=font_obj, fill=glow_color)
-            tmp = tmp.filter(ImageFilter.GaussianBlur(radius=radius))
-            alpha = tmp.split()[3].point(lambda p: int(p*glow_intensity*alpha_scale))
-            tmp.putalpha(alpha)
-            glow_layer = Image.alpha_composite(glow_layer, tmp)
-        img = Image.alpha_composite(img, glow_layer)
+        glow_img = Image.new("RGBA", img.size, (255,255,255,0))
+        glow_draw = ImageDraw.Draw(glow_img)
+        glow_draw.text((x,y), text, font=font_obj, fill=glow_color)
+        glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
+        alpha = glow_img.split()[3].point(lambda p: int(p*glow_intensity))
+        glow_img.putalpha(alpha)
+        img = Image.alpha_composite(img, glow_img)
 
-    # --- Gradient or solid fill ---
+    # --- Gradient (earlier version) ---
     if gradient_colors and gradient_type != "none":
-        c1, c2 = hex_to_rgb(gradient_colors[0]), hex_to_rgb(gradient_colors[1])
-        gradient = Image.new("RGBA", (w, h))
-        draw = ImageDraw.Draw(gradient)
-
-        if gradient_type == "vertical":
-            for yy in range(h):
-                ratio = yy / (h-1)
-                r = int(c1[0]*(1-ratio) + c2[0]*ratio)
-                g = int(c1[1]*(1-ratio) + c2[1]*ratio)
-                b = int(c1[2]*(1-ratio) + c2[2]*ratio)
-                draw.line([(0,yy),(w,yy)], fill=(r,g,b,255))
-
-        elif gradient_type == "horizontal":
-            for xx in range(w):
-                ratio = xx / (w-1)
-                r = int(c1[0]*(1-ratio) + c2[0]*ratio)
-                g = int(c1[1]*(1-ratio) + c2[1]*ratio)
-                b = int(c1[2]*(1-ratio) + c2[2]*ratio)
-                draw.line([(xx,0),(xx,h)], fill=(r,g,b,255))
-
-        elif gradient_type == "slant-left":
-            for y in range(h):
-                for x in range(w):
-                    ratio = (x+y)/(w+h)
-                    r = int(c1[0]*(1-ratio) + c2[0]*ratio)
-                    g = int(c1[1]*(1-ratio) + c2[1]*ratio)
-                    b = int(c1[2]*(1-ratio) + c2[2]*ratio)
-                    gradient.putpixel((x,y),(r,g,b,255))
-
-        elif gradient_type == "slant-right":
-            for y in range(h):
-                for x in range(w):
-                    ratio = (w-x+y)/(w+h)
-                    r = int(c1[0]*(1-ratio) + c2[0]*ratio)
-                    g = int(c1[1]*(1-ratio) + c2[1]*ratio)
-                    b = int(c1[2]*(1-ratio) + c2[2]*ratio)
-                    gradient.putpixel((x,y),(r,g,b,255))
-
-        elif gradient_type == "radial":
-            cx, cy = w//2, h//2
-            max_dist = math.hypot(cx, cy)
-            for y in range(h):
-                for x in range(w):
-                    dist = math.hypot(x-cx, y-cy)
-                    ratio = min(dist/max_dist, 1.0)
-                    r = int(c1[0]*(1-ratio) + c2[0]*ratio)
-                    g = int(c1[1]*(1-ratio) + c2[1]*ratio)
-                    b = int(c1[2]*(1-ratio) + c2[2]*ratio)
-                    gradient.putpixel((x,y),(r,g,b,255))
-
-        # mask text and apply gradient
+        gradient = make_gradient(w, h, gradient_colors, gradient_type)
         text_mask = Image.new("L", (w, h), 0)
         ImageDraw.Draw(text_mask).text((0,0), text, font=font_obj, fill=255)
         text_area = Image.composite(gradient, Image.new("RGBA",(w,h),(255,255,255,0)), text_mask)
         img.paste(text_area, (x,y), text_area)
     else:
         ImageDraw.Draw(img).text((x,y), text, fill=text_color, font=font_obj)
+
+    # --- Outline ---
+    if outline_color and outline_size > 0:
+        outline_img = Image.new("RGBA", img.size, (255,255,255,0))
+        outline_draw = ImageDraw.Draw(outline_img)
+        steps = int(outline_size)
+        for dx in range(-steps, steps+1):
+            for dy in range(-steps, steps+1):
+                if dx!=0 or dy!=0:
+                    outline_draw.text((x+dx,y+dy), text, font=font_obj, fill=outline_color)
+        img = Image.alpha_composite(outline_img, img)
 
     # --- Resize to text bounding box ---
     if resize_to_text:
