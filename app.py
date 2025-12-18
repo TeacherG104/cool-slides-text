@@ -41,9 +41,19 @@ def hex_to_rgb(hex_color: str):
     hex_color = hex_color.lstrip("#")
     return tuple(int(hex_color[i:i+2], 16) for i in (0,2,4))
 
+import io, json, math
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+def hex_to_rgb(value: str):
+    value = value.lstrip('#')
+    lv = len(value)
+    return tuple(int(value[i:i+lv//3], 16) for i in range(0, lv, lv//3))
+
 def make_gradient(width, height, colors, gradient_type="vertical"):
     rgb_colors = [hex_to_rgb(c) for c in colors]
     gradient = Image.new("RGBA", (width, height))
+    draw = ImageDraw.Draw(gradient)
+
     if gradient_type in ["vertical", "horizontal"]:
         steps = height if gradient_type=="vertical" else width
         for i in range(steps):
@@ -55,9 +65,10 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
             g = int(c1[1]*(1-local_ratio) + c2[1]*local_ratio)
             b = int(c1[2]*(1-local_ratio) + c2[2]*local_ratio)
             if gradient_type=="vertical":
-                ImageDraw.Draw(gradient).line([(0,i),(width,i)], fill=(r,g,b,255))
+                draw.line([(0,i),(width,i)], fill=(r,g,b,255))
             else:
-                ImageDraw.Draw(gradient).line([(i,0),(i,height)], fill=(r,g,b,255))
+                draw.line([(i,0),(i,height)], fill=(r,g,b,255))
+
     elif gradient_type.startswith("slant"):
         for y in range(height):
             for x in range(width):
@@ -69,6 +80,7 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
                 g = int(c1[1]*(1-local_ratio) + c2[1]*local_ratio)
                 b = int(c1[2]*(1-local_ratio) + c2[2]*local_ratio)
                 gradient.putpixel((x,y),(r,g,b,255))
+
     elif gradient_type=="radial":
         cx, cy = width//2, height//2
         max_dist = math.hypot(width, height)
@@ -83,7 +95,9 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
                 g = int(c1[1]*(1-local_ratio) + c2[1]*local_ratio)
                 b = int(c1[2]*(1-local_ratio) + c2[2]*local_ratio)
                 gradient.putpixel((x,y),(r,g,b,255))
+
     return gradient
+
 
 def render_text_image(text: str, font_name: str, size: int,
                       text_color: str = "#000000",
@@ -99,16 +113,16 @@ def render_text_image(text: str, font_name: str, size: int,
     tmp_draw = ImageDraw.Draw(tmp_img)
     bbox = tmp_draw.textbbox((0,0), text, font=font_obj)
     w, h = bbox[2]-bbox[0], bbox[3]-bbox[1]
-    h += int(size * 0.3)  # extra padding for descenders
+    h += int(size * 0.3)
 
     padding = size // 2
     width, height = w + padding*2, h + padding*2
-    bg = (255,255,255,0) if transparent else hex_to_rgb(background_color) + (255,)
-    img = Image.new("RGBA", (width, height), bg)
 
+    # Transparent base for effects
+    img = Image.new("RGBA", (width, height), (255,255,255,0))
     x, y = padding, padding
 
-    # --- Glow layer (restored version) ---
+    # --- Glow ---
     if glow_color and glow_size > 0:
         glow_img = Image.new("RGBA", img.size, (255,255,255,0))
         glow_draw = ImageDraw.Draw(glow_img)
@@ -118,7 +132,7 @@ def render_text_image(text: str, font_name: str, size: int,
         glow_img.putalpha(alpha)
         img = Image.alpha_composite(img, glow_img)
 
-    # --- Outline layer ---
+    # --- Outline ---
     if outline_color and outline_size > 0:
         outline_img = Image.new("RGBA", img.size, (255,255,255,0))
         outline_draw = ImageDraw.Draw(outline_img)
@@ -129,7 +143,7 @@ def render_text_image(text: str, font_name: str, size: int,
                     outline_draw.text((x+dx,y+dy), text, font=font_obj, fill=outline_color)
         img = Image.alpha_composite(img, outline_img)
 
-    # --- Gradient or solid fill (restored version) ---
+    # --- Text fill ---
     if gradient_colors and gradient_type != "none":
         gradient = make_gradient(w, h, gradient_colors, gradient_type)
         text_mask = Image.new("L", (w, h), 0)
@@ -138,6 +152,11 @@ def render_text_image(text: str, font_name: str, size: int,
         img.paste(text_area, (x,y), text_area)
     else:
         ImageDraw.Draw(img).text((x,y), text, fill=text_color, font=font_obj)
+
+    # --- Add background last if not transparent ---
+    if not transparent:
+        bg_layer = Image.new("RGBA", img.size, hex_to_rgb(background_color)+(255,))
+        img = Image.alpha_composite(bg_layer, img)
 
     # --- Resize to text bounding box ---
     if resize_to_text:
