@@ -23,6 +23,15 @@ def render_text_image(text: str, color: str, font_name: str):
     draw.text(((width - w) // 2, (height - h) // 2), text, fill=color, font=font_obj)
 
     return img
+from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],   # or restrict to specific origins later
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 @app.get("/ping")
 def ping():
