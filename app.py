@@ -90,13 +90,15 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
 def render_text_image(text: str, font_name: str, size: int,
                       text_color: str = "#000000",
                       gradient_colors=None, gradient_type="vertical",
-                      transparent: bool = True, resize_to_text: bool = False,
+                      transparent: bool = True, background_color: str = "#ffffff",
+                      resize_to_text: bool = False,
                       glow_color: str = None, glow_size: int = 0, glow_intensity: float = 1.0,
                       outline_color: str = None, outline_size: int = 0):
     font_obj = load_font(font_name, size)
     width, height = 600, 200
-    img = Image.new("RGBA", (width, height),
-                    (255,255,255,0) if transparent else (255,255,255,255))
+    bg = (255,255,255,0) if transparent else hex_to_rgb(background_color) + (255,)
+    img = Image.new("RGBA", (width, height), bg)
+
     mask = Image.new("L",(width,height),0)
     draw = ImageDraw.Draw(mask)
     bbox = draw.textbbox((0,0), text, font=font_obj)
@@ -159,6 +161,7 @@ def render_preview(
     gradientType: str = Query("vertical"),
     gradientColors: str = Query(None),
     transparent: bool = Query(True),
+    backgroundColor: str = Query("#ffffff"),
     resizeToText: bool = Query(False)
 ):
     try:
@@ -168,7 +171,8 @@ def render_preview(
                                 glow_color=glowColor, glow_size=glowSize, glow_intensity=glowIntensity,
                                 outline_color=outlineColor, outline_size=outlineSize,
                                 gradient_colors=colors, gradient_type=gradientType,
-                                transparent=transparent, resize_to_text=resizeToText)
+                                transparent=transparent, background_color=backgroundColor,
+                                resize_to_text=resizeToText)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
@@ -182,6 +186,7 @@ def render_insert(payload: dict = Body(...)):
         text = payload.get("text", "")
         font = payload.get("font", "Arial")
         size = int(payload.get("size", 64))
+
         text_color = payload.get("textColor", "#000000")
 
         glow_color = payload.get("glowColor")
@@ -192,16 +197,18 @@ def render_insert(payload: dict = Body(...)):
         outline_size = int(payload.get("outlineSize", 0))
 
         gradient_type = payload.get("gradientType", "vertical")
-        gradient_colors = payload.get("gradientColors")  # expects list like ["#ff0000","#0000ff"]
+        gradient_colors = payload.get("gradientColors")  # expects list like ["#ff0000", "#0000ff"]
 
         transparent = bool(payload.get("transparent", True))
+        background_color = payload.get("backgroundColor", "#ffffff")
         resize_to_text = bool(payload.get("resizeToText", False))
 
         img = render_text_image(
             text, font, size,
             text_color=text_color,
             gradient_colors=gradient_colors, gradient_type=gradient_type,
-            transparent=transparent, resize_to_text=resize_to_text,
+            transparent=transparent, background_color=background_color,
+            resize_to_text=resize_to_text,
             glow_color=glow_color, glow_size=glow_size, glow_intensity=glow_intensity,
             outline_color=outline_color, outline_size=outline_size
         )
