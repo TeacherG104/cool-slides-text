@@ -122,15 +122,26 @@ def render_text_image(text: str, font_name: str, size: int,
     img = Image.new("RGBA", (width, height), (255,255,255,0))
     x, y = padding, padding
 
-    # --- Glow ---
-    if glow_color and glow_size > 0:
-        glow_img = Image.new("RGBA", img.size, (255,255,255,0))
-        glow_draw = ImageDraw.Draw(glow_img)
-        glow_draw.text((x,y), text, font=font_obj, fill=glow_color)
-        glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
-        alpha = glow_img.split()[3].point(lambda p: int(p*glow_intensity))
-        glow_img.putalpha(alpha)
-        img = Image.alpha_composite(img, glow_img)
+# --- Glow using text mask ---
+if glow_color and glow_size > 0:
+    # 1. Create text mask
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).text((0,0), text, font=font_obj, fill=255)
+
+    # 2. Blur mask to create glow halo
+    glow_mask = mask.filter(ImageFilter.GaussianBlur(radius=glow_size))
+
+    # 3. Tint glow with glow_color
+    r, g, b = hex_to_rgb(glow_color)
+    glow_layer = Image.new("RGBA", (w, h), (r, g, b, 0))
+    glow_layer.putalpha(glow_mask)
+
+    # 4. Apply glow intensity slider
+    alpha = glow_layer.split()[3].point(lambda p: int(p * glow_intensity))
+    glow_layer.putalpha(alpha)
+
+    # 5. Composite glow ABOVE background
+    img = Image.alpha_composite(img, glow_layer.resize(img.size))
 
     # --- Outline ---
     if outline_color and outline_size > 0:
