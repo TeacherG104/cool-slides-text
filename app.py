@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query, Body
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import io
 
 app = FastAPI()
@@ -40,7 +40,9 @@ def load_font(font_name: str, size: int = 64):
             return ImageFont.load_default()
     return ImageFont.load_default()
 
-def render_text_image(text: str, color: str, font_name: str):
+def render_text_image(text: str, color: str, font_name: str,
+                      glow_color: str = None, glow_size: int = 0,
+                      outline_color: str = None, outline_size: int = 0):
     font_obj = load_font(font_name, 64)
     width, height = 600, 200
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
@@ -49,7 +51,26 @@ def render_text_image(text: str, color: str, font_name: str):
     bbox = draw.textbbox((0, 0), text, font=font_obj)
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
-    draw.text(((width - w) // 2, (height - h) // 2), text, fill=color, font=font_obj)
+    x = (width - w) // 2
+    y = (height - h) // 2
+
+    # Outline effect: draw text multiple times around the main position
+    if outline_color and outline_size > 0:
+        for dx in range(-outline_size, outline_size + 1):
+            for dy in range(-outline_size, outline_size + 1):
+                if dx != 0 or dy != 0:
+                    draw.text((x + dx, y + dy), text, font=font_obj, fill=outline_color)
+
+    # Glow effect: draw blurred background text
+    if glow_color and glow_size > 0:
+        glow_img = Image.new("RGBA", img.size, (255, 255, 255, 0))
+        glow_draw = ImageDraw.Draw(glow_img)
+        glow_draw.text((x, y), text, font=font_obj, fill=glow_color)
+        glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
+        img = Image.alpha_composite(img, glow_img)
+
+    # Main text
+    draw.text((x, y), text, font=font_obj, fill=color)
 
     return img
 
@@ -65,10 +86,16 @@ def ping():
 def render_preview(
     text: str = Query(...),
     color: str = Query("#000000"),
-    font: str = Query("Arial")
+    font: str = Query("Arial"),
+    glowColor: str = Query(None),
+    glowSize: int = Query(0),
+    outlineColor: str = Query(None),
+    outlineSize: int = Query(0)
 ):
     try:
-        img = render_text_image(text, color, font)
+        img = render_text_image(text, color, font,
+                                glow_color=glowColor, glow_size=glowSize,
+                                outline_color=outlineColor, outline_size=outlineSize)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
@@ -82,7 +109,14 @@ def render_insert(payload: dict = Body(...)):
         text = payload.get("text", "")
         color = payload.get("color", "#000000")
         font = payload.get("font", "Arial")
-        img = render_text_image(text, color, font)
+        glow_color = payload.get("glowColor")
+        glow_size = int(payload.get("glowSize", 0))
+        outline_color = payload.get("outlineColor")
+        outline_size = int(payload.get("outlineSize", 0))
+
+        img = render_text_image(text, color, font,
+                                glow_color=glow_color, glow_size=glow_size,
+                                outline_color=outline_color, outline_size=outline_size)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
