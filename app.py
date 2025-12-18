@@ -6,7 +6,7 @@ import io
 
 app = FastAPI()
 
-# Enable CORS so your sidebar JS can call endpoints directly
+# Enable CORS so sidebar JS can call endpoints directly
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],   # during development allow all; later restrict to Google domains if desired
@@ -15,11 +15,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def load_font(font_name: str = "Arial", size: int = 64):
-    try:
-        return ImageFont.truetype(f"{font_name}.ttf", size)
-    except Exception:
-        return ImageFont.load_default()
+# Map sidebar font keys to actual .ttf files in your repo
+FONT_MAP = {
+    "henny": "fonts/HennyPenny-Regular.ttf",
+    "honk": "fonts/Honk-Regular-VariableFont_MORF,SHLN.ttf",
+    "metamorphous": "fonts/Metamorphous-Regular.ttf",
+    "monoton": "fonts/Monoton-Regular.ttf",
+    "moolahlah": "fonts/MooLahLah-Regular.ttf",
+    "mysteryquest": "fonts/MysteryQuest-Regular.ttf",
+    "nabla": "fonts/Nabla-Regular-VariableFont_EDPT,EHLT.ttf",
+    "pacifico": "fonts/Pacifico-Regular.ttf",
+    "transformers": "fonts/Transformers Movie.ttf",
+    "uncial": "fonts/UncialAntiqua-Regular.ttf",
+}
+
+def load_font(font_name: str, size: int = 64):
+    path = FONT_MAP.get(font_name.lower())
+    if path:
+        try:
+            print(f"Trying to load font: {path}")  # helpful debug log
+            return ImageFont.truetype(path, size)
+        except Exception as e:
+            print(f"Font load failed: {e}")
+            return ImageFont.load_default()
+    return ImageFont.load_default()
 
 def render_text_image(text: str, color: str, font_name: str):
     font_obj = load_font(font_name, 64)
