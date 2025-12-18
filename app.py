@@ -88,11 +88,15 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
     return gradient
 
 def render_text_image(text: str, font_name: str, size: int,
-                      glow_color: str = None, glow_size: int = 0,
-                      outline_color: str = None, outline_size: int = 0,
-                      gradient_colors=None, gradient_type="vertical"):
+                      text_color: str = "#000000",
+                      gradient_colors=None, gradient_type="vertical",
+                      transparent: bool = True, resize_to_text: bool = False,
+                      glow_color: str = None, glow_size: int = 0, glow_intensity: float = 1.0,
+                      outline_color: str = None, outline_size: int = 0):
     font_obj = load_font(font_name, size)
     width, height = 600, 200
+    img = Image.new("RGBA", (width, height),
+                    (255,255,255,0) if transparent else (255,255,255,255))
     mask = Image.new("L",(width,height),0)
     draw = ImageDraw.Draw(mask)
     bbox = draw.textbbox((0,0), text, font=font_obj)
@@ -100,13 +104,12 @@ def render_text_image(text: str, font_name: str, size: int,
     y = (height-(bbox[3]-bbox[1]))//2
     draw.text((x,y), text, fill=255, font=font_obj)
 
-    # Base image
+    # Gradient or solid fill
     if gradient_colors:
         gradient = make_gradient(width,height,gradient_colors,gradient_type)
-        img = Image.composite(gradient, Image.new("RGBA",(width,height),(255,255,255,0)), mask)
+        img = Image.composite(gradient, img, mask)
     else:
-        img = Image.new("RGBA",(width,height),(255,255,255,0))
-        ImageDraw.Draw(img).text((x,y), text, fill="#000000", font=font_obj)
+        ImageDraw.Draw(img).text((x,y), text, fill=text_color, font=font_obj)
 
     # Outline
     if outline_color and outline_size > 0:
@@ -124,7 +127,13 @@ def render_text_image(text: str, font_name: str, size: int,
         glow_draw = ImageDraw.Draw(glow_img)
         glow_draw.text((x,y), text, font=font_obj, fill=glow_color)
         glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
+        alpha = glow_img.split()[3].point(lambda p: int(p*glow_intensity))
+        glow_img.putalpha(alpha)
         img = Image.alpha_composite(img, glow_img)
+
+    # Resize background to text bounding box
+    if resize_to_text:
+        img = img.crop(bbox)
 
     return img
 
@@ -141,19 +150,25 @@ def render_preview(
     text: str = Query(...),
     font: str = Query("Arial"),
     size: int = Query(64),
+    textColor: str = Query("#000000"),
     glowColor: str = Query(None),
     glowSize: int = Query(0),
+    glowIntensity: float = Query(1.0),
     outlineColor: str = Query(None),
     outlineSize: int = Query(0),
     gradientType: str = Query("vertical"),
-    gradientColors: str = Query(None)
+    gradientColors: str = Query(None),
+    transparent: bool = Query(True),
+    resizeToText: bool = Query(False)
 ):
     try:
         colors = json.loads(gradientColors) if gradientColors else None
         img = render_text_image(text, font, size,
-                                glow_color=glowColor, glow_size=glowSize,
+                                text_color=textColor,
+                                glow_color=glowColor, glow_size=glowSize, glow_intensity=glowIntensity,
                                 outline_color=outlineColor, outline_size=outlineSize,
-                                gradient_colors=colors, gradient_type=gradientType)
+                                gradient_colors=colors, gradient_type=gradientType,
+                                transparent=transparent, resize_to_text=resizeToText)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
@@ -167,17 +182,30 @@ def render_insert(payload: dict = Body(...)):
         text = payload.get("text", "")
         font = payload.get("font", "Arial")
         size = int(payload.get("size", 64))
+        text_color = payload.get("textColor", "#000000")
+
         glow_color = payload.get("glowColor")
         glow_size = int(payload.get("glowSize", 0))
+        glow_intensity = float(payload.get("glowIntensity", 1.0))
+
         outline_color = payload.get("outlineColor")
         outline_size = int(payload.get("outlineSize", 0))
-        gradient_type = payload.get("gradientType", "vertical")
-        gradient_colors = payload.get("gradientColors")
 
-        img = render_text_image(text, font, size,
-                                glow_color=glow_color, glow_size=glow_size,
-                                outline_color=outline_color, outline_size=outline_size,
-                                gradient_colors=gradient_colors, gradient_type=gradient_type)
+        gradient_type = payload.get("gradientType", "vertical")
+        gradient_colors = payload.get("gradientColors")  # expects list like ["#ff0000","#0000ff"]
+
+        transparent = bool(payload.get("transparent", True))
+        resize_to_text = bool(payload.get("resizeToText", False))
+
+        img = render_text_image(
+            text, font, size,
+            text_color=text_color,
+            gradient_colors=gradient_colors, gradient_type=gradient_type,
+            transparent=transparent, resize_to_text=resize_to_text,
+            glow_color=glow_color, glow_size=glow_size, glow_intensity=glow_intensity,
+            outline_color=outline_color, outline_size=outline_size
+        )
+
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
