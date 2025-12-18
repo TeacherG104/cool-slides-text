@@ -1,9 +1,19 @@
 from fastapi import FastAPI, Query, Body
 from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageDraw, ImageFont
 import io
 
 app = FastAPI()
+
+# Enable CORS so your sidebar JS can call endpoints directly
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # during development allow all; later restrict to Google domains if desired
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def load_font(font_name: str = "Arial", size: int = 64):
     try:
@@ -23,15 +33,10 @@ def render_text_image(text: str, color: str, font_name: str):
     draw.text(((width - w) // 2, (height - h) // 2), text, fill=color, font=font_obj)
 
     return img
-from fastapi.middleware.cors import CORSMiddleware
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],   # or restrict to specific origins later
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+@app.get("/")
+def root():
+    return {"message": "Service is running"}
 
 @app.get("/ping")
 def ping():
