@@ -95,21 +95,29 @@ def render_text_image(text: str, font_name: str, size: int,
                       glow_color: str = None, glow_size: int = 0, glow_intensity: float = 1.0,
                       outline_color: str = None, outline_size: int = 0):
     font_obj = load_font(font_name, size)
-    width, height = 600, 200
+
+    # Start with a generous canvas
+    width, height = size * 12 // 10, size * 4
     bg = (255,255,255,0) if transparent else hex_to_rgb(background_color) + (255,)
     img = Image.new("RGBA", (width, height), bg)
 
-    mask = Image.new("L",(width,height),0)
+    # Mask for text
+    mask = Image.new("L", (width, height), 0)
     draw = ImageDraw.Draw(mask)
     bbox = draw.textbbox((0,0), text, font=font_obj)
     x = (width-(bbox[2]-bbox[0]))//2
     y = (height-(bbox[3]-bbox[1]))//2
     draw.text((x,y), text, fill=255, font=font_obj)
 
-    # Gradient or solid fill
-    if gradient_colors:
-        gradient = make_gradient(width,height,gradient_colors,gradient_type)
-        img = Image.composite(gradient, img, mask)
+    # Gradient anchored to text bbox
+    if gradient_colors and gradient_type != "none":
+        w, h = bbox[2]-bbox[0], bbox[3]-bbox[1]
+        gradient = make_gradient(w, h, gradient_colors, gradient_type)
+        text_area = Image.new("RGBA", (w, h), (255,255,255,0))
+        text_mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(text_mask).text((0,0), text, font=font_obj, fill=255)
+        text_area = Image.composite(gradient, text_area, text_mask)
+        img.paste(text_area, (x,y), text_area)
     else:
         ImageDraw.Draw(img).text((x,y), text, fill=text_color, font=font_obj)
 
@@ -135,7 +143,10 @@ def render_text_image(text: str, font_name: str, size: int,
 
     # Resize background to text bounding box
     if resize_to_text:
-        img = img.crop(bbox)
+        w, h = bbox[2]-bbox[0], bbox[3]-bbox[1]
+        new_img = Image.new("RGBA", (w, h), bg)
+        new_img.paste(img.crop(bbox), (0,0))
+        img = new_img
 
     return img
 
