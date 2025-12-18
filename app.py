@@ -108,7 +108,7 @@ def render_text_image(text: str, font_name: str, size: int,
 
     x, y = padding, padding
 
-    # --- Glow (original setup you liked) ---
+    # --- Glow layer (restored version) ---
     if glow_color and glow_size > 0:
         glow_img = Image.new("RGBA", img.size, (255,255,255,0))
         glow_draw = ImageDraw.Draw(glow_img)
@@ -118,17 +118,7 @@ def render_text_image(text: str, font_name: str, size: int,
         glow_img.putalpha(alpha)
         img = Image.alpha_composite(img, glow_img)
 
-    # --- Gradient (earlier version) ---
-    if gradient_colors and gradient_type != "none":
-        gradient = make_gradient(w, h, gradient_colors, gradient_type)
-        text_mask = Image.new("L", (w, h), 0)
-        ImageDraw.Draw(text_mask).text((0,0), text, font=font_obj, fill=255)
-        text_area = Image.composite(gradient, Image.new("RGBA",(w,h),(255,255,255,0)), text_mask)
-        img.paste(text_area, (x,y), text_area)
-    else:
-        ImageDraw.Draw(img).text((x,y), text, fill=text_color, font=font_obj)
-
-    # --- Outline ---
+    # --- Outline layer ---
     if outline_color and outline_size > 0:
         outline_img = Image.new("RGBA", img.size, (255,255,255,0))
         outline_draw = ImageDraw.Draw(outline_img)
@@ -137,7 +127,17 @@ def render_text_image(text: str, font_name: str, size: int,
             for dy in range(-steps, steps+1):
                 if dx!=0 or dy!=0:
                     outline_draw.text((x+dx,y+dy), text, font=font_obj, fill=outline_color)
-        img = Image.alpha_composite(outline_img, img)
+        img = Image.alpha_composite(img, outline_img)
+
+    # --- Gradient or solid fill (restored version) ---
+    if gradient_colors and gradient_type != "none":
+        gradient = make_gradient(w, h, gradient_colors, gradient_type)
+        text_mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(text_mask).text((0,0), text, font=font_obj, fill=255)
+        text_area = Image.composite(gradient, Image.new("RGBA",(w,h),(255,255,255,0)), text_mask)
+        img.paste(text_area, (x,y), text_area)
+    else:
+        ImageDraw.Draw(img).text((x,y), text, fill=text_color, font=font_obj)
 
     # --- Resize to text bounding box ---
     if resize_to_text:
