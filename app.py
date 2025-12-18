@@ -123,11 +123,12 @@ def render_text_image(text: str, font_name: str, size: int,
             glow_layer = Image.alpha_composite(glow_layer, tmp)
         img = Image.alpha_composite(img, glow_layer)
 
-    # --- Gradient or solid fill ---
+       # --- Gradient or solid fill ---
     if gradient_colors and gradient_type != "none":
         c1, c2 = hex_to_rgb(gradient_colors[0]), hex_to_rgb(gradient_colors[1])
         gradient = Image.new("RGBA", (w, h))
         draw = ImageDraw.Draw(gradient)
+
         if gradient_type == "vertical":
             for yy in range(h):
                 ratio = yy / (h-1)
@@ -135,6 +136,7 @@ def render_text_image(text: str, font_name: str, size: int,
                 g = int(c1[1]*(1-ratio) + c2[1]*ratio)
                 b = int(c1[2]*(1-ratio) + c2[2]*ratio)
                 draw.line([(0,yy),(w,yy)], fill=(r,g,b,255))
+
         elif gradient_type == "horizontal":
             for xx in range(w):
                 ratio = xx / (w-1)
@@ -142,6 +144,37 @@ def render_text_image(text: str, font_name: str, size: int,
                 g = int(c1[1]*(1-ratio) + c2[1]*ratio)
                 b = int(c1[2]*(1-ratio) + c2[2]*ratio)
                 draw.line([(xx,0),(xx,h)], fill=(r,g,b,255))
+
+        elif gradient_type == "slant-left":
+            for y in range(h):
+                for x in range(w):
+                    ratio = (x+y)/(w+h)
+                    r = int(c1[0]*(1-ratio) + c2[0]*ratio)
+                    g = int(c1[1]*(1-ratio) + c2[1]*ratio)
+                    b = int(c1[2]*(1-ratio) + c2[2]*ratio)
+                    gradient.putpixel((x,y),(r,g,b,255))
+
+        elif gradient_type == "slant-right":
+            for y in range(h):
+                for x in range(w):
+                    ratio = (w-x+y)/(w+h)
+                    r = int(c1[0]*(1-ratio) + c2[0]*ratio)
+                    g = int(c1[1]*(1-ratio) + c2[1]*ratio)
+                    b = int(c1[2]*(1-ratio) + c2[2]*ratio)
+                    gradient.putpixel((x,y),(r,g,b,255))
+
+        elif gradient_type == "radial":
+            cx, cy = w//2, h//2
+            max_dist = math.hypot(cx, cy)
+            for y in range(h):
+                for x in range(w):
+                    dist = math.hypot(x-cx, y-cy)
+                    ratio = min(dist/max_dist, 1.0)
+                    r = int(c1[0]*(1-ratio) + c2[0]*ratio)
+                    g = int(c1[1]*(1-ratio) + c2[1]*ratio)
+                    b = int(c1[2]*(1-ratio) + c2[2]*ratio)
+                    gradient.putpixel((x,y),(r,g,b,255))
+
         # mask text and apply gradient
         text_mask = Image.new("L", (w, h), 0)
         ImageDraw.Draw(text_mask).text((0,0), text, font=font_obj, fill=255)
