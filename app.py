@@ -44,10 +44,12 @@ def hex_to_rgb(hex_color: str):
 import io, json, math
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
+
 def hex_to_rgb(value: str):
     value = value.lstrip('#')
     lv = len(value)
     return tuple(int(value[i:i+lv//3], 16) for i in range(0, lv, lv//3))
+
 
 def make_gradient(width, height, colors, gradient_type="vertical"):
     rgb_colors = [hex_to_rgb(c) for c in colors]
@@ -55,46 +57,47 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
     draw = ImageDraw.Draw(gradient)
 
     if gradient_type in ["vertical", "horizontal"]:
-        steps = height if gradient_type=="vertical" else width
+        steps = height if gradient_type == "vertical" else width
         for i in range(steps):
             ratio = i / steps
-            idx = int(ratio * (len(rgb_colors)-1))
-            c1, c2 = rgb_colors[idx], rgb_colors[min(idx+1, len(rgb_colors)-1)]
-            local_ratio = (ratio * (len(rgb_colors)-1)) % 1
-            r = int(c1[0]*(1-local_ratio) + c2[0]*local_ratio)
-            g = int(c1[1]*(1-local_ratio) + c2[1]*local_ratio)
-            b = int(c1[2]*(1-local_ratio) + c2[2]*local_ratio)
-            if gradient_type=="vertical":
-                draw.line([(0,i),(width,i)], fill=(r,g,b,255))
+            idx = int(ratio * (len(rgb_colors) - 1))
+            c1, c2 = rgb_colors[idx], rgb_colors[min(idx + 1, len(rgb_colors) - 1)]
+            local_ratio = (ratio * (len(rgb_colors) - 1)) % 1
+            r = int(c1[0] * (1 - local_ratio) + c2[0] * local_ratio)
+            g = int(c1[1] * (1 - local_ratio) + c2[1] * local_ratio)
+            b = int(c1[2] * (1 - local_ratio) + c2[2] * local_ratio)
+
+            if gradient_type == "vertical":
+                draw.line([(0, i), (width, i)], fill=(r, g, b, 255))
             else:
-                draw.line([(i,0),(i,height)], fill=(r,g,b,255))
+                draw.line([(i, 0), (i, height)], fill=(r, g, b, 255))
 
     elif gradient_type.startswith("slant"):
         for y in range(height):
             for x in range(width):
-                ratio = (x+y)/(width+height) if "right" in gradient_type else (width-x+y)/(width+height)
-                idx = int(ratio * (len(rgb_colors)-1))
-                c1, c2 = rgb_colors[idx], rgb_colors[min(idx+1, len(rgb_colors)-1)]
-                local_ratio = (ratio * (len(rgb_colors)-1)) % 1
-                r = int(c1[0]*(1-local_ratio) + c2[0]*local_ratio)
-                g = int(c1[1]*(1-local_ratio) + c2[1]*local_ratio)
-                b = int(c1[2]*(1-local_ratio) + c2[2]*local_ratio)
-                gradient.putpixel((x,y),(r,g,b,255))
+                ratio = (x + y) / (width + height) if "right" in gradient_type else (width - x + y) / (width + height)
+                idx = int(ratio * (len(rgb_colors) - 1))
+                c1, c2 = rgb_colors[idx], rgb_colors[min(idx + 1, len(rgb_colors) - 1)]
+                local_ratio = (ratio * (len(rgb_colors) - 1)) % 1
+                r = int(c1[0] * (1 - local_ratio) + c2[0] * local_ratio)
+                g = int(c1[1] * (1 - local_ratio) + c2[1] * local_ratio)
+                b = int(c1[2] * (1 - local_ratio) + c2[2] * local_ratio)
+                gradient.putpixel((x, y), (r, g, b, 255))
 
-    elif gradient_type=="radial":
-        cx, cy = width//2, height//2
+    elif gradient_type == "radial":
+        cx, cy = width // 2, height // 2
         max_dist = math.hypot(width, height)
         for y in range(height):
             for x in range(width):
-                dist = math.hypot(x-cx, y-cy)
-                ratio = dist/max_dist
-                idx = int(ratio * (len(rgb_colors)-1))
-                c1, c2 = rgb_colors[idx], rgb_colors[min(idx+1, len(rgb_colors)-1)]
-                local_ratio = (ratio * (len(rgb_colors)-1)) % 1
-                r = int(c1[0]*(1-local_ratio) + c2[0]*local_ratio)
-                g = int(c1[1]*(1-local_ratio) + c2[1]*local_ratio)
-                b = int(c1[2]*(1-local_ratio) + c2[2]*local_ratio)
-                gradient.putpixel((x,y),(r,g,b,255))
+                dist = math.hypot(x - cx, y - cy)
+                ratio = dist / max_dist
+                idx = int(ratio * (len(rgb_colors) - 1))
+                c1, c2 = rgb_colors[idx], rgb_colors[min(idx + 1, len(rgb_colors) - 1)]
+                local_ratio = (ratio * (len(rgb_colors) - 1)) % 1
+                r = int(c1[0] * (1 - local_ratio) + c2[0] * local_ratio)
+                g = int(c1[1] * (1 - local_ratio) + c2[1] * local_ratio)
+                b = int(c1[2] * (1 - local_ratio) + c2[2] * local_ratio)
+                gradient.putpixel((x, y), (r, g, b, 255))
 
     return gradient
 
@@ -106,72 +109,71 @@ def render_text_image(text: str, font_name: str, size: int,
                       resize_to_text: bool = False,
                       glow_color: str = None, glow_size: int = 0, glow_intensity: float = 1.0,
                       outline_color: str = None, outline_size: float = 0.0):
-    font_obj = load_font(font_name, size)
 
-    # Measure text with padding
-    tmp_img = Image.new("L", (1,1))
-    tmp_draw = ImageDraw.Draw(tmp_img)
-    bbox = tmp_draw.textbbox((0,0), text, font=font_obj)
-    w, h = bbox[2]-bbox[0], bbox[3]-bbox[1]
+    # Load font
+    font_obj = ImageFont.truetype(font_name, size)
+
+    # Measure text
+    tmp = Image.new("L", (1, 1))
+    d = ImageDraw.Draw(tmp)
+    bbox = d.textbbox((0, 0), text, font=font_obj)
+    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     h += int(size * 0.3)
 
     padding = size // 2
-    width, height = w + padding*2, h + padding*2
-
-    # Transparent base for effects
-    img = Image.new("RGBA", (width, height), (255,255,255,0))
+    width, height = w + padding * 2, h + padding * 2
     x, y = padding, padding
 
-# --- Glow using text mask ---
-if glow_color and glow_size > 0:
-    # 1. Create text mask
-    mask = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(mask).text((0,0), text, font=font_obj, fill=255)
+    # Transparent base for effects
+    img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
 
-    # 2. Blur mask to create glow halo
-    glow_mask = mask.filter(ImageFilter.GaussianBlur(radius=glow_size))
+    # --- GLOW (mask‑driven, always visible) ---
+    if glow_color and glow_size > 0:
+        mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
 
-    # 3. Tint glow with glow_color
-    r, g, b = hex_to_rgb(glow_color)
-    glow_layer = Image.new("RGBA", (w, h), (r, g, b, 0))
-    glow_layer.putalpha(glow_mask)
+        glow_mask = mask.filter(ImageFilter.GaussianBlur(radius=glow_size))
 
-    # 4. Apply glow intensity slider
-    alpha = glow_layer.split()[3].point(lambda p: int(p * glow_intensity))
-    glow_layer.putalpha(alpha)
+        r, g, b = hex_to_rgb(glow_color)
+        glow_layer = Image.new("RGBA", (w, h), (r, g, b, 0))
+        glow_layer.putalpha(glow_mask)
 
-    # 5. Composite glow ABOVE background
-    img = Image.alpha_composite(img, glow_layer.resize(img.size))
+        alpha = glow_layer.split()[3].point(lambda p: int(p * glow_intensity))
+        glow_layer.putalpha(alpha)
 
-    # --- Outline ---
+        img = Image.alpha_composite(img, glow_layer.resize(img.size))
+
+    # --- OUTLINE ---
     if outline_color and outline_size > 0:
-        outline_img = Image.new("RGBA", img.size, (255,255,255,0))
-        outline_draw = ImageDraw.Draw(outline_img)
+        outline_img = Image.new("RGBA", img.size, (255, 255, 255, 0))
+        od = ImageDraw.Draw(outline_img)
         steps = int(outline_size)
-        for dx in range(-steps, steps+1):
-            for dy in range(-steps, steps+1):
-                if dx!=0 or dy!=0:
-                    outline_draw.text((x+dx,y+dy), text, font=font_obj, fill=outline_color)
+
+        for dx in range(-steps, steps + 1):
+            for dy in range(-steps, steps + 1):
+                if dx != 0 or dy != 0:
+                    od.text((x + dx, y + dy), text, font=font_obj, fill=outline_color)
+
         img = Image.alpha_composite(img, outline_img)
 
-    # --- Text fill ---
+    # --- TEXT FILL ---
     if gradient_colors and gradient_type != "none":
         gradient = make_gradient(w, h, gradient_colors, gradient_type)
-        text_mask = Image.new("L", (w, h), 0)
-        ImageDraw.Draw(text_mask).text((0,0), text, font=font_obj, fill=255)
-        text_area = Image.composite(gradient, Image.new("RGBA",(w,h),(255,255,255,0)), text_mask)
-        img.paste(text_area, (x,y), text_area)
+        mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
+        text_area = Image.composite(gradient, Image.new("RGBA", (w, h), (255, 255, 255, 0)), mask)
+        img.paste(text_area, (x, y), text_area)
     else:
-        ImageDraw.Draw(img).text((x,y), text, fill=text_color, font=font_obj)
+        ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
 
-    # --- Add background last if not transparent ---
+    # --- BACKGROUND LAST ---
     if not transparent:
-        bg_layer = Image.new("RGBA", img.size, hex_to_rgb(background_color)+(255,))
-        img = Image.alpha_composite(bg_layer, img)
+        bg = Image.new("RGBA", img.size, hex_to_rgb(background_color) + (255,))
+        img = Image.alpha_composite(bg, img)
 
-    # --- Resize to text bounding box ---
+    # --- RESIZE ---
     if resize_to_text:
-        img = img.crop((x, y, x+w, y+h))
+        img = img.crop((x, y, x + w, y + h))
 
     return img
 @app.get("/")
