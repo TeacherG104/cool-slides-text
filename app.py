@@ -1,3 +1,4 @@
+print(">>> THIS IS THE NEW DEPLOYED VERSION <<<")
 from fastapi import FastAPI, Query, Body, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
