@@ -127,28 +127,23 @@ def render_text_image(text: str, font_name: str, size: int,
     # Transparent base for effects
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
 
-    # --- GLOW (mask‑driven, correctly aligned with text) ---
-    if glow_color and glow_size > 0:
-        # 1. Text mask at tight text size
-        mask = Image.new("L", (w, h), 0)
-        ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
+  # --- GLOW (full-canvas mask, never clipped) ---
+if glow_color and glow_size > 0:
+    glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow_img)
 
-        # 2. Blur that mask
-        glow_mask = mask.filter(ImageFilter.GaussianBlur(radius=glow_size))
+    # draw text at the same (x, y) as everything else
+    glow_draw.text((x, y), text, font=font_obj, fill=glow_color)
 
-        # 3. Tint with glow color
-        r, g, b = hex_to_rgb(glow_color)
-        glow_layer = Image.new("RGBA", (w, h), (r, g, b, 0))
-        glow_layer.putalpha(glow_mask)
+    # blur the entire canvas
+    glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
 
-        # 4. Apply intensity
-        alpha = glow_layer.split()[3].point(lambda p: int(p * glow_intensity))
-        glow_layer.putalpha(alpha)
+    # apply intensity
+    alpha = glow_img.split()[3].point(lambda p: int(p * glow_intensity))
+    glow_img.putalpha(alpha)
 
-        # 5. Paste glow at (x, y) onto full-size canvas
-        glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        glow_img.paste(glow_layer, (x, y), glow_layer)
-        img = Image.alpha_composite(img, glow_img)
+    # composite
+    img = Image.alpha_composite(img, glow_img)
 
     # --- OUTLINE ---
     if outline_color and outline_size > 0:
