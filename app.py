@@ -175,7 +175,7 @@ def render_text_image(
 
     # --- OUTLINE ---
     if outline_color and outline_size > 0:
-        outline_img = Image.new("RGBA", img.size, (255, 255, 255, 0))
+        outline_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
         od = ImageDraw.Draw(outline_img)
         steps = int(outline_size)
 
