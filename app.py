@@ -92,16 +92,26 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
 
     return gradient
 
-def render_text_image(text: str, font_name: str, size: int,
-                      text_color: str = "#000000",
-                      gradient_colors=None, gradient_type="vertical",
-                      transparent: bool = True, background_color: str = "#ffffff",
-                      resize_to_text: bool = False,
-                      glow_color: str = None, glow_size: int = 0, glow_intensity: float = 1.0,
-                      outline_color: str = None, outline_size: float = 0.0):
-
+def render_text_image(
+    text: str,
+    font_name: str,
+    size: int,
+    text_color: str = "#000000",
+    gradient_colors=None,
+    gradient_type: str = "vertical",
+    transparent: bool = True,
+    background_color: str = "#ffffff",
+    glow_color: str = None,
+    glow_size: int = 0,
+    glow_intensity: float = 1.0,
+    outline_color: str = None,
+    outline_size: float = 0.0,
+    resize_to_text: bool = False
+):
+    # Load font
     font_obj = ImageFont.truetype(font_name, size)
 
+    # Measure text
     tmp = Image.new("L", (1, 1))
     d = ImageDraw.Draw(tmp)
     bbox = d.textbbox((0, 0), text, font=font_obj)
@@ -112,16 +122,21 @@ def render_text_image(text: str, font_name: str, size: int,
     width, height = w + padding * 2, h + padding * 2
     x, y = padding, padding
 
+    # Transparent base
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
 
-    # --- GLOW ---
+    # --- GLOW (full canvas, never clipped) ---
     if glow_color and glow_size > 0:
         glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
         glow_draw = ImageDraw.Draw(glow_img)
+
         glow_draw.text((x, y), text, font=font_obj, fill=glow_color)
+
         glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
+
         alpha = glow_img.split()[3].point(lambda p: int(p * glow_intensity))
         glow_img.putalpha(alpha)
+
         img = Image.alpha_composite(img, glow_img)
 
     # --- OUTLINE ---
@@ -129,10 +144,12 @@ def render_text_image(text: str, font_name: str, size: int,
         outline_img = Image.new("RGBA", img.size, (255, 255, 255, 0))
         od = ImageDraw.Draw(outline_img)
         steps = int(outline_size)
+
         for dx in range(-steps, steps + 1):
             for dy in range(-steps, steps + 1):
                 if dx != 0 or dy != 0:
                     od.text((x + dx, y + dy), text, font=font_obj, fill=outline_color)
+
         img = Image.alpha_composite(img, outline_img)
 
     # --- TEXT FILL ---
@@ -140,7 +157,11 @@ def render_text_image(text: str, font_name: str, size: int,
         gradient = make_gradient(w, h, gradient_colors, gradient_type)
         mask = Image.new("L", (w, h), 0)
         ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
-        text_area = Image.composite(gradient, Image.new("RGBA", (w, h), (255, 255, 255, 0)), mask)
+        text_area = Image.composite(
+            gradient,
+            Image.new("RGBA", (w, h), (255, 255, 255, 0)),
+            mask
+        )
         img.paste(text_area, (x, y), text_area)
     else:
         ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
