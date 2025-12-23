@@ -140,7 +140,7 @@ def render_text_image(
     x, y = padding, padding
 
     # Transparent base
-    img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
     # --- GLOW (full canvas, never clipped) ---
     if glow_color and glow_size > 0:
