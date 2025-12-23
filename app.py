@@ -229,7 +229,7 @@ def test():
         transparent=False,
         background_color="#000000",
         glow_color="#00ffff",
-        glow_size=40,
+        glow_size=5,
         glow_intensity=1.0,
         outline_color="#ffffff",
         outline_size=6,
@@ -253,7 +253,7 @@ def test_glow():
         transparent=True,              # keep transparent so glow is visible
         background_color="#000000",    # ignored because transparent=True
         glow_color="#00ffff",          # bright cyan glow
-        glow_size=60,                  # large halo for visibility
+        glow_size=10,                  # large halo for visibility
         glow_intensity=1.0,
         outline_color=None,            # no outline
         outline_size=0,
