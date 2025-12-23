@@ -180,6 +180,31 @@ def test():
     buf.seek(0)
     return Response(content=buf.getvalue(), media_type="image/png")
 
+@app.get("/testGlow")
+def test_glow():
+    # Generate glow-only version of the text
+    img = render_text_image(
+        text="GLOW",
+        font_name="/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        size=160,
+        text_color="#000000",          # ignored because no text fill
+        gradient_colors=None,          # no gradient
+        gradient_type="none",
+        transparent=True,              # keep transparent so glow is visible
+        background_color="#000000",    # ignored because transparent=True
+        glow_color="#00ffff",          # bright cyan glow
+        glow_size=60,                  # large halo for visibility
+        glow_intensity=1.0,
+        outline_color=None,            # no outline
+        outline_size=0,
+        resize_to_text=False           # keep full canvas so glow isn't clipped
+    )
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return Response(content=buf.getvalue(), media_type="image/png")
+
 @app.get("/fonttest")
 def fonttest():
     try:
