@@ -127,23 +127,23 @@ def render_text_image(text: str, font_name: str, size: int,
     # Transparent base for effects
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
 
-  # --- GLOW (full-canvas mask, never clipped) ---
-if glow_color and glow_size > 0:
-    glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    glow_draw = ImageDraw.Draw(glow_img)
+    # --- GLOW (full-canvas mask, never clipped) ---
+    if glow_color and glow_size > 0:
+        glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        glow_draw = ImageDraw.Draw(glow_img)
 
-    # draw text at the same (x, y) as everything else
-    glow_draw.text((x, y), text, font=font_obj, fill=glow_color)
+        # draw text at the same (x, y) as everything else
+        glow_draw.text((x, y), text, font=font_obj, fill=glow_color)
 
-    # blur the entire canvas
-    glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
+        # blur the entire canvas
+        glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
 
-    # apply intensity
-    alpha = glow_img.split()[3].point(lambda p: int(p * glow_intensity))
-    glow_img.putalpha(alpha)
+        # apply intensity
+        alpha = glow_img.split()[3].point(lambda p: int(p * glow_intensity))
+        glow_img.putalpha(alpha)
 
-    # composite
-    img = Image.alpha_composite(img, glow_img)
+        # composite
+        img = Image.alpha_composite(img, glow_img)
 
     # --- OUTLINE ---
     if outline_color and outline_size > 0:
