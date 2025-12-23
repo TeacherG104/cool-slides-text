@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, Body
+from fastapi import FastAPI, Query, Body, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -37,19 +37,10 @@ def load_font(font_name: str, size: int = 64):
             return ImageFont.load_default()
     return ImageFont.load_default()
 
-def hex_to_rgb(hex_color: str):
-    hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i:i+2], 16) for i in (0,2,4))
-
-import io, json, math
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-
-
 def hex_to_rgb(value: str):
     value = value.lstrip('#')
     lv = len(value)
     return tuple(int(value[i:i+lv//3], 16) for i in range(0, lv, lv//3))
-
 
 def make_gradient(width, height, colors, gradient_type="vertical"):
     rgb_colors = [hex_to_rgb(c) for c in colors]
@@ -101,7 +92,6 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
 
     return gradient
 
-
 def render_text_image(text: str, font_name: str, size: int,
                       text_color: str = "#000000",
                       gradient_colors=None, gradient_type="vertical",
@@ -110,10 +100,8 @@ def render_text_image(text: str, font_name: str, size: int,
                       glow_color: str = None, glow_size: int = 0, glow_intensity: float = 1.0,
                       outline_color: str = None, outline_size: float = 0.0):
 
-    # Load font
     font_obj = ImageFont.truetype(font_name, size)
 
-    # Measure text
     tmp = Image.new("L", (1, 1))
     d = ImageDraw.Draw(tmp)
     bbox = d.textbbox((0, 0), text, font=font_obj)
@@ -124,25 +112,16 @@ def render_text_image(text: str, font_name: str, size: int,
     width, height = w + padding * 2, h + padding * 2
     x, y = padding, padding
 
-    # Transparent base for effects
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
 
-    # --- GLOW (full-canvas mask, never clipped) ---
+    # --- GLOW ---
     if glow_color and glow_size > 0:
         glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
         glow_draw = ImageDraw.Draw(glow_img)
-
-        # draw text at the same (x, y) as everything else
         glow_draw.text((x, y), text, font=font_obj, fill=glow_color)
-
-        # blur the entire canvas
         glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
-
-        # apply intensity
         alpha = glow_img.split()[3].point(lambda p: int(p * glow_intensity))
         glow_img.putalpha(alpha)
-
-        # composite
         img = Image.alpha_composite(img, glow_img)
 
     # --- OUTLINE ---
@@ -150,12 +129,10 @@ def render_text_image(text: str, font_name: str, size: int,
         outline_img = Image.new("RGBA", img.size, (255, 255, 255, 0))
         od = ImageDraw.Draw(outline_img)
         steps = int(outline_size)
-
         for dx in range(-steps, steps + 1):
             for dy in range(-steps, steps + 1):
                 if dx != 0 or dy != 0:
                     od.text((x + dx, y + dy), text, font=font_obj, fill=outline_color)
-
         img = Image.alpha_composite(img, outline_img)
 
     # --- TEXT FILL ---
@@ -173,16 +150,12 @@ def render_text_image(text: str, font_name: str, size: int,
         bg = Image.new("RGBA", img.size, hex_to_rgb(background_color) + (255,))
         img = Image.alpha_composite(bg, img)
 
-    # --- RESIZE (with padding so glow isn't cut off) ---
+    # --- RESIZE ---
     if resize_to_text:
         pad = glow_size * 2 + outline_size * 2
         img = img.crop((x - pad, y - pad, x + w + pad, y + h + pad))
 
     return img
-
-from fastapi import FastAPI, Response
-
-app = FastAPI()
 
 @app.get("/test")
 def test():
@@ -200,9 +173,8 @@ def test():
         glow_intensity=1.0,
         outline_color="#ffffff",
         outline_size=6,
-        resize_to_text=False   # <-- keeps glow from being cropped
+        resize_to_text=False
     )
-
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
@@ -217,7 +189,7 @@ def fonttest():
     except Exception as e:
         print("FONT ERROR:", e)
         return {"status": "font failed", "error": str(e)}
-        
+
 @app.get("/")
 def root():
     return {"message": "Service is running"}
@@ -261,7 +233,6 @@ def render_preview(
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-
 @app.post("/render")
 def render_insert(payload: dict = Body(...)):
     try:
@@ -278,7 +249,7 @@ def render_insert(payload: dict = Body(...)):
         outline_size = float(payload.get("outlineSize", 0.0))
 
         gradient_type = payload.get("gradientType", "vertical")
-        gradient_colors = payload.get("gradientColors")  # expects list like ["#ff0000","#0000ff"]
+        gradient_colors = payload.get("gradientColors")
 
         transparent = bool(payload.get("transparent", True))
         background_color = payload.get("backgroundColor", "#ffffff")
