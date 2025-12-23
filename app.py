@@ -188,16 +188,16 @@ def test():
         font_name="/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         size=120,
         text_color="#ffffff",
-        gradient_colors=["#ff0000", "#0000ff"],
+        gradient_colors=["#ff0000", "#8000ff"],
         gradient_type="vertical",
         transparent=False,
         background_color="#000000",
         glow_color="#00ffff",
-        glow_size=25,
+        glow_size=40,
         glow_intensity=1.0,
         outline_color="#ffffff",
-        outline_size=4,
-        resize_to_text=True
+        outline_size=6,
+        resize_to_text=False   # <-- IMPORTANT
     )
 
     buf = io.BytesIO()
