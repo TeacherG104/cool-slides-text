@@ -159,20 +159,20 @@ def render_text_image(
 
     # --- GLOW ---
     if glow_color and glow_size > 0:
-        print("GLOW BLOCK RUNNING")
-        glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        glow_draw = ImageDraw.Draw(glow_img)
-
-        glow_rgb = hex_to_rgb(glow_color) + (255,)
-        glow_draw.text((x, y), text, font=font_obj, fill=glow_rgb)
-
-        glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
-
-        alpha = glow_img.split()[3].point(lambda p: int(p * glow_intensity))
-        glow_img.putalpha(alpha)
-
-        img = Image.alpha_composite(img, glow_img)
-
+        # 1. Create mask
+        glow_mask = Image.new("L", img.size, 0)
+        mask_draw = ImageDraw.Draw(glow_mask)
+        mask_draw.text((x, y), text, font=font_obj, fill=255)
+    
+        # 2. Blur mask
+        glow_mask = glow_mask.filter(ImageFilter.GaussianBlur(radius=glow_size))
+    
+        # 3. Create colored glow layer
+        glow_layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
+        glow_layer.putalpha(glow_mask)
+    
+        # 4. Composite
+        img = Image.alpha_composite(img, glow_layer)
     # --- OUTLINE ---
     if outline_color and outline_size > 0:
         outline_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
