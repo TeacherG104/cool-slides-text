@@ -240,7 +240,15 @@ def test():
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
-    return Response(content=buf.getvalue(), media_type="image/png")
+    return Response(
+    content=buf.getvalue(),
+    media_type="image/png",
+    headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+)
 
 @app.get("/testGlow")
 def test_glow():
@@ -265,7 +273,15 @@ def test_glow():
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
-    return Response(content=buf.getvalue(), media_type="image/png")
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/png",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 @app.get("/fonttest")
 def fonttest():
