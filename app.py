@@ -160,6 +160,7 @@ def render_text_image(
 
     # --- GLOW (mask-based, correct) ---
     if glow_color and glow_size > 0:
+        print(">>> INSIDE GLOW BLOCK <<<")
         # 1. Create a mask (white text on black)
         glow_mask = Image.new("L", img.size, 0)
         mask_draw = ImageDraw.Draw(glow_mask)
