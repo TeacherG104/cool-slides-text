@@ -38,9 +38,23 @@ def load_font(font_name: str, size: int = 64):
     return ImageFont.load_default()
 
 def hex_to_rgb(value: str):
-    value = value.lstrip('#')
-    lv = len(value)
-    return tuple(int(value[i:i+lv//3], 16) for i in range(0, lv, lv//3))
+    if not value:
+        return (255, 255, 255)
+
+    value = value.strip().lstrip('#')
+
+    # Expand shorthand hex (#fff → #ffffff)
+    if len(value) == 3:
+        value = ''.join(c*2 for c in value)
+
+    # Must be exactly 6 characters now
+    if len(value) != 6:
+        return (255, 255, 255)
+
+    r = int(value[0:2], 16)
+    g = int(value[2:4], 16)
+    b = int(value[4:6], 16)
+    return (r, g, b)
 
 def make_gradient(width, height, colors, gradient_type="vertical"):
     rgb_colors = [hex_to_rgb(c) for c in colors]
