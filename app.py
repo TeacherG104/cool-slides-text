@@ -108,7 +108,9 @@ def render_text_image(
     outline_size: float = 0.0,
     resize_to_text: bool = False
 ):
-
+    print("START RENDER")
+    font_obj = ImageFont.truetype(font_name, size)
+    
     # <-- PRINT GOES HERE, indented 4 spaces
     print(
         "PARAMS:",
@@ -198,7 +200,7 @@ def render_text_image(
     if resize_to_text:
         pad = glow_size * 2 + outline_size * 2
         img = img.crop((x - pad, y - pad, x + w + pad, y + h + pad))
-
+    print("END RENDER")
     return img
 
 @app.get("/test")
