@@ -109,9 +109,8 @@ def render_text_image(
     resize_to_text: bool = False
 ):
     print("START RENDER")
-    font_obj = ImageFont.truetype(font_name, size)
-    
-    # <-- PRINT GOES HERE, indented 4 spaces
+
+    # Debug params
     print(
         "PARAMS:",
         "text_color=", text_color,
@@ -144,27 +143,22 @@ def render_text_image(
     # Transparent base
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
-   # --- GLOW (full-canvas mask, never clipped) ---
+    # --- GLOW ---
     if glow_color and glow_size > 0:
         glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
         glow_draw = ImageDraw.Draw(glow_img)
-    
-        # convert hex → RGBA
+
         glow_rgb = hex_to_rgb(glow_color) + (255,)
-    
-        # draw glow text
         glow_draw.text((x, y), text, font=font_obj, fill=glow_rgb)
-    
-        # blur
+
         glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=glow_size))
-    
-        # intensity
+
         alpha = glow_img.split()[3].point(lambda p: int(p * glow_intensity))
         glow_img.putalpha(alpha)
-    
-        # composite
+
         img = Image.alpha_composite(img, glow_img)
-        # --- OUTLINE ---
+
+    # --- OUTLINE ---
     if outline_color and outline_size > 0:
         outline_img = Image.new("RGBA", img.size, (255, 255, 255, 0))
         od = ImageDraw.Draw(outline_img)
@@ -177,7 +171,7 @@ def render_text_image(
 
         img = Image.alpha_composite(img, outline_img)
 
-       # --- TEXT FILL ---
+    # --- TEXT FILL ---
     if gradient_colors and gradient_type != "none":
         gradient = make_gradient(w, h, gradient_colors, gradient_type)
         mask = Image.new("L", (w, h), 0)
@@ -188,12 +182,10 @@ def render_text_image(
             mask
         )
         img.paste(text_area, (x, y), text_area)
-    
-    # GLOW-ONLY MODE → skip text fill
+
     elif glow_color and glow_size > 0 and outline_color is None:
-        pass
-    
-    # NORMAL TEXT FILL
+        pass  # glow-only mode
+
     else:
         ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
 
@@ -206,6 +198,7 @@ def render_text_image(
     if resize_to_text:
         pad = glow_size * 2 + outline_size * 2
         img = img.crop((x - pad, y - pad, x + w + pad, y + h + pad))
+
     print("END RENDER")
     return img
 
