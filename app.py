@@ -169,25 +169,25 @@ def render_text_image(
 
         img = Image.alpha_composite(img, outline_img)
 
-   # --- TEXT FILL ---
-if gradient_colors and gradient_type != "none":
-    gradient = make_gradient(w, h, gradient_colors, gradient_type)
-    mask = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
-    text_area = Image.composite(
-        gradient,
-        Image.new("RGBA", (w, h), (255, 255, 255, 0)),
-        mask
-    )
-    img.paste(text_area, (x, y), text_area)
-
-# GLOW-ONLY MODE → skip text fill
-elif glow_color and glow_size > 0 and outline_color is None:
-    pass
-
-# NORMAL TEXT FILL
-else:
-    ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
+       # --- TEXT FILL ---
+    if gradient_colors and gradient_type != "none":
+        gradient = make_gradient(w, h, gradient_colors, gradient_type)
+        mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
+        text_area = Image.composite(
+            gradient,
+            Image.new("RGBA", (w, h), (255, 255, 255, 0)),
+            mask
+        )
+        img.paste(text_area, (x, y), text_area)
+    
+    # GLOW-ONLY MODE → skip text fill
+    elif glow_color and glow_size > 0 and outline_color is None:
+        pass
+    
+    # NORMAL TEXT FILL
+    else:
+        ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
 
     # --- BACKGROUND LAST ---
     if not transparent:
