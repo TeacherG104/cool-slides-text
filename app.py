@@ -158,8 +158,9 @@ def render_text_image(
     # Transparent base
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
-   
-    # --- OUTLINE ---
+    # ---------------------------------------------------------
+    # 1. OUTLINE FIRST
+    # ---------------------------------------------------------
     if outline_color and outline_size > 0:
         outline_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
         od = ImageDraw.Draw(outline_img)
@@ -172,11 +173,14 @@ def render_text_image(
 
         img = Image.alpha_composite(img, outline_img)
 
-    # --- TEXT FILL ---
+    # ---------------------------------------------------------
+    # 2. TEXT FILL (GRADIENT OR SOLID)
+    # ---------------------------------------------------------
     if gradient_colors and gradient_type != "none":
         gradient = make_gradient(w, h, gradient_colors, gradient_type)
         mask = Image.new("L", (w, h), 0)
         ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
+
         text_area = Image.composite(
             gradient,
             Image.new("RGBA", (w, h), (255, 255, 255, 0)),
@@ -184,43 +188,47 @@ def render_text_image(
         )
         img.paste(text_area, (x, y), text_area)
 
-    elif glow_color and glow_size > 0 and outline_color is None:
-        pass  # glow-only mode
+    else:
+        # Normal solid text fill
+        ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
 
-     # --- GLOW (mask-based, correct) ---
+    # ---------------------------------------------------------
+    # 3. GLOW LAST (FIXED)
+    # ---------------------------------------------------------
     if glow_color and glow_size > 0:
         print(">>> INSIDE GLOW BLOCK <<<")
-        # 1. Create a mask (white text on black)
+
+        # 1. Mask
         glow_mask = Image.new("L", img.size, 0)
         mask_draw = ImageDraw.Draw(glow_mask)
         mask_draw.text((x, y), text, font=font_obj, fill=255)
-    
-        # 2. Blur the mask
+
+        # 2. Blur
         glow_mask = glow_mask.filter(ImageFilter.GaussianBlur(radius=glow_size))
-    
-        # 3. Create a colored glow layer
+
+        # 3. Glow layer
         glow_layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
         glow_layer.putalpha(glow_mask)
-    
-        # 4. Composite glow onto the base image
+
+        # 4. Composite on top
         img = Image.alpha_composite(img, glow_layer)
 
-    else:
-        ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
-
-    # --- BACKGROUND LAST ---
+    # ---------------------------------------------------------
+    # 4. BACKGROUND (if not transparent)
+    # ---------------------------------------------------------
     if not transparent:
         bg = Image.new("RGBA", img.size, hex_to_rgb(background_color) + (255,))
         img = Image.alpha_composite(bg, img)
 
-    # --- RESIZE ---
+    # ---------------------------------------------------------
+    # 5. RESIZE (optional)
+    # ---------------------------------------------------------
     if resize_to_text:
         pad = glow_size * 2 + outline_size * 2
         img = img.crop((x - pad, y - pad, x + w + pad, y + h + pad))
 
     print("END RENDER")
     return img
-
 @app.get("/test")
 def test():
     img = render_text_image(
