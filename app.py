@@ -176,6 +176,37 @@ def render_text_image(text: str, font_name: str, size: int,
         img = img.crop((x, y, x + w, y + h))
 
     return img
+
+from fastapi import FastAPI, Response
+
+app = FastAPI()
+
+@app.get("/test")
+def test():
+    # Simple test render
+    img = render_text_image(
+        text="TEST",
+        font_name="fonts/Roboto-Regular.ttf",   # <-- use any font you know exists
+        size=120,
+        text_color="#ffffff",
+        gradient_colors=["#ff0000", "#0000ff"],
+        gradient_type="vertical",
+        transparent=False,
+        background_color="#000000",
+        glow_color="#00ffff",
+        glow_size=25,
+        glow_intensity=1.0,
+        outline_color="#ffffff",
+        outline_size=4,
+        resize_to_text=True
+    )
+
+    # Convert to PNG bytes
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    return Response(content=buf.getvalue(), media_type="image/png")
 @app.get("/")
 def root():
     return {"message": "Service is running"}
