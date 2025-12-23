@@ -145,6 +145,7 @@ def render_text_image(
 
     # --- GLOW ---
     if glow_color and glow_size > 0:
+        print("GLOW BLOCK RUNNING")
         glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
         glow_draw = ImageDraw.Draw(glow_img)
 
