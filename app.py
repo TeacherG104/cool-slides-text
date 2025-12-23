@@ -205,6 +205,17 @@ def test():
     img.save(buf, format="PNG")
     buf.seek(0)
     return Response(content=buf.getvalue(), media_type="image/png")
+
+@app.get("/fonttest")
+def fonttest():
+    try:
+        f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 120)
+        print("FONT OK:", f)
+        return {"status": "font loaded"}
+    except Exception as e:
+        print("FONT ERROR:", e)
+        return {"status": "font failed", "error": str(e)}
+        
 @app.get("/")
 def root():
     return {"message": "Service is running"}
