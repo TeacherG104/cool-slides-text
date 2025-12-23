@@ -166,14 +166,15 @@ def render_text_image(text: str, font_name: str, size: int,
     else:
         ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
 
-    # --- BACKGROUND LAST ---
+    # --- BACKGROUND LAST (critical for glow visibility) ---
     if not transparent:
         bg = Image.new("RGBA", img.size, hex_to_rgb(background_color) + (255,))
         img = Image.alpha_composite(bg, img)
 
-    # --- RESIZE ---
+    # --- RESIZE (with padding so glow isn't cut off) ---
     if resize_to_text:
-        img = img.crop((x, y, x + w, y + h))
+        pad = glow_size * 2 + outline_size * 2
+        img = img.crop((x - pad, y - pad, x + w + pad, y + h + pad))
 
     return img
 
@@ -197,7 +198,7 @@ def test():
         glow_intensity=1.0,
         outline_color="#ffffff",
         outline_size=6,
-        resize_to_text=False   # <-- IMPORTANT
+        resize_to_text=False   # <-- keeps glow from being cropped
     )
 
     buf = io.BytesIO()
