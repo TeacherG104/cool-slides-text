@@ -93,6 +93,18 @@ def make_gradient(width, height, colors, gradient_type="vertical"):
     return gradient
 
 def render_text_image(
+    print("PARAMS:",
+      "text_color=", text_color,
+      "gradient_colors=", gradient_colors,
+      "gradient_type=", gradient_type,
+      "transparent=", transparent,
+      "background_color=", background_color,
+      "glow_color=", glow_color,
+      "glow_size=", glow_size,
+      "glow_intensity=", glow_intensity,
+      "outline_color=", outline_color,
+      "outline_size=", outline_size,
+      "resize_to_text=", resize_to_text)
     text: str,
     font_name: str,
     size: int,
