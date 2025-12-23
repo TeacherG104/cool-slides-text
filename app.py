@@ -183,10 +183,9 @@ app = FastAPI()
 
 @app.get("/test")
 def test():
-    # Simple test render
     img = render_text_image(
         text="TEST",
-        font_name="fonts/Roboto-Regular.ttf",   # <-- use any font you know exists
+        font_name="/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         size=120,
         text_color="#ffffff",
         gradient_colors=["#ff0000", "#0000ff"],
@@ -201,11 +200,9 @@ def test():
         resize_to_text=True
     )
 
-    # Convert to PNG bytes
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
-
     return Response(content=buf.getvalue(), media_type="image/png")
 @app.get("/")
 def root():
