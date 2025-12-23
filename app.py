@@ -127,21 +127,28 @@ def render_text_image(text: str, font_name: str, size: int,
     # Transparent base for effects
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
 
-    # --- GLOW (mask‑driven, always visible) ---
+    # --- GLOW (mask‑driven, correctly aligned with text) ---
     if glow_color and glow_size > 0:
+        # 1. Text mask at tight text size
         mask = Image.new("L", (w, h), 0)
         ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
 
+        # 2. Blur that mask
         glow_mask = mask.filter(ImageFilter.GaussianBlur(radius=glow_size))
 
+        # 3. Tint with glow color
         r, g, b = hex_to_rgb(glow_color)
         glow_layer = Image.new("RGBA", (w, h), (r, g, b, 0))
         glow_layer.putalpha(glow_mask)
 
+        # 4. Apply intensity
         alpha = glow_layer.split()[3].point(lambda p: int(p * glow_intensity))
         glow_layer.putalpha(alpha)
 
-        img = Image.alpha_composite(img, glow_layer.resize(img.size))
+        # 5. Paste glow at (x, y) onto full-size canvas
+        glow_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        glow_img.paste(glow_layer, (x, y), glow_layer)
+        img = Image.alpha_composite(img, glow_img)
 
     # --- OUTLINE ---
     if outline_color and outline_size > 0:
@@ -166,7 +173,7 @@ def render_text_image(text: str, font_name: str, size: int,
     else:
         ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
 
-    # --- BACKGROUND LAST (critical for glow visibility) ---
+    # --- BACKGROUND LAST ---
     if not transparent:
         bg = Image.new("RGBA", img.size, hex_to_rgb(background_color) + (255,))
         img = Image.alpha_composite(bg, img)
