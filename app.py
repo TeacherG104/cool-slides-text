@@ -1,13 +1,22 @@
 print(">>> THIS IS THE NEW DEPLOYED VERSION <<<")
+
 from fastapi import FastAPI, Query, Body, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-import io, json, math
+import io, json, math, os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = FastAPI()
 
-from fastapi.staticfiles import StaticFiles
+# Serve the fonts directory
+app.mount("/fonts", StaticFiles(directory="fonts"), name="fonts")
+
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = FastAPI()
 
@@ -336,9 +345,16 @@ def render_preview(
     resizeToText: bool = Query(False)
 ):
     try:
+        # Convert URL-style font path to local filesystem path
+        font_path = font
+        if font_path.startswith("/fonts/"):
+            local_font = font_path.lstrip("/")  # remove leading slash
+            font_path = os.path.join(BASE_DIR, local_font)
+
         colors = json.loads(gradientColors) if gradientColors else None
+
         img = render_text_image(
-            text, font, size,
+            text, font_path, size,
             text_color=textColor,
             glow_color=glowColor, glow_size=glowSize, glow_intensity=glowIntensity,
             outline_color=outlineColor, outline_size=outlineSize,
@@ -346,10 +362,12 @@ def render_preview(
             transparent=transparent, background_color=backgroundColor,
             resize_to_text=resizeToText
         )
+
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
         return StreamingResponse(buf, media_type="image/png")
+
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -375,8 +393,14 @@ def render_insert(payload: dict = Body(...)):
         background_color = payload.get("backgroundColor", "#ffffff")
         resize_to_text = bool(payload.get("resizeToText", False))
 
+        # Convert URL-style font path to local filesystem path
+        font_path = font
+        if font_path.startswith("/fonts/"):
+            local_font = font_path.lstrip("/")
+            font_path = os.path.join(BASE_DIR, local_font)
+
         img = render_text_image(
-            text, font, size,
+            text, font_path, size,
             text_color=text_color,
             gradient_colors=gradient_colors, gradient_type=gradient_type,
             transparent=transparent, background_color=background_color,
@@ -389,5 +413,6 @@ def render_insert(payload: dict = Body(...)):
         img.save(buf, format="PNG")
         buf.seek(0)
         return StreamingResponse(buf, media_type="image/png")
+
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
