@@ -209,39 +209,39 @@ def render_text_image(
         ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
 
    # ---------------------------------------------------------
-# 3. MULTI-LAYER GLOW (FALLOFF)
-# ---------------------------------------------------------
-if glow_color and glow_size > 0:
-    print(">>> MULTI-LAYER GLOW <<<")
-
-    glow_layers = []
-    base_mask = Image.new("L", img.size, 0)
-    mask_draw = ImageDraw.Draw(base_mask)
-    mask_draw.text((x, y), text, font=font_obj, fill=255)
-
-    # Three blur radii for falloff
-    radii = [
-        glow_size * 0.25,
-        glow_size * 0.6,
-        glow_size
-    ]
-
-    # Corresponding opacities
-    alphas = [
-        int(255 * glow_intensity * 1.0),
-        int(255 * glow_intensity * 0.6),
-        int(255 * glow_intensity * 0.3)
-    ]
-
-    for r, a in zip(radii, alphas):
-        blurred = base_mask.filter(ImageFilter.GaussianBlur(radius=r))
-        layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
-        layer.putalpha(blurred.point(lambda p: min(p, a)))
-        glow_layers.append(layer)
-
-    # Composite glow layers under text
-    for g in glow_layers:
-        img = Image.alpha_composite(img, g)
+    # 3. MULTI-LAYER GLOW (FALLOFF)
+    # ---------------------------------------------------------
+    if glow_color and glow_size > 0:
+        print(">>> MULTI-LAYER GLOW <<<")
+    
+        glow_layers = []
+        base_mask = Image.new("L", img.size, 0)
+        mask_draw = ImageDraw.Draw(base_mask)
+        mask_draw.text((x, y), text, font=font_obj, fill=255)
+    
+        # Three blur radii for falloff
+        radii = [
+            glow_size * 0.25,
+            glow_size * 0.6,
+            glow_size
+        ]
+    
+        # Corresponding opacities
+        alphas = [
+            int(255 * glow_intensity * 1.0),
+            int(255 * glow_intensity * 0.6),
+            int(255 * glow_intensity * 0.3)
+        ]
+    
+        for r, a in zip(radii, alphas):
+            blurred = base_mask.filter(ImageFilter.GaussianBlur(radius=r))
+            layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
+            layer.putalpha(blurred.point(lambda p: min(p, a)))
+            glow_layers.append(layer)
+    
+        # Composite glow layers under text
+        for g in glow_layers:
+            img = Image.alpha_composite(img, g)
     # ---------------------------------------------------------
     # 4. BACKGROUND (if not transparent)
     # ---------------------------------------------------------
