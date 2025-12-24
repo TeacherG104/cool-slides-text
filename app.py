@@ -73,55 +73,55 @@ def hex_to_rgb(value: str):
     b = int(value[4:6], 16)
     return (r, g, b)
 
-def make_gradient(width, height, colors, gradient_type="vertical"):
-    rgb_colors = [hex_to_rgb(c) for c in colors]
-    gradient = Image.new("RGBA", (width, height))
-    draw = ImageDraw.Draw(gradient)
+def make_gradient(w, h, colors, gtype):
+    c1 = hex_to_rgb(colors[0])
+    c2 = hex_to_rgb(colors[1])
 
-    if gradient_type in ["vertical", "horizontal"]:
-        steps = height if gradient_type == "vertical" else width
-        for i in range(steps):
-            ratio = i / steps
-            idx = int(ratio * (len(rgb_colors) - 1))
-            c1, c2 = rgb_colors[idx], rgb_colors[min(idx + 1, len(rgb_colors) - 1)]
-            local_ratio = (ratio * (len(rgb_colors) - 1)) % 1
-            r = int(c1[0] * (1 - local_ratio) + c2[0] * local_ratio)
-            g = int(c1[1] * (1 - local_ratio) + c2[1] * local_ratio)
-            b = int(c1[2] * (1 - local_ratio) + c2[2] * local_ratio)
+    grad = Image.new("RGBA", (w, h))
+    px = grad.load()
 
-            if gradient_type == "vertical":
-                draw.line([(0, i), (width, i)], fill=(r, g, b, 255))
-            else:
-                draw.line([(i, 0), (i, height)], fill=(r, g, b, 255))
+    if gtype == "horizontal":
+        for x in range(w):
+            t = x / (w - 1)
+            r = int(c1[0] * (1 - t) + c2[0] * t)
+            g = int(c1[1] * (1 - t) + c2[1] * t)
+            b = int(c1[2] * (1 - t) + c2[2] * t)
+            for y in range(h):
+                px[x, y] = (r, g, b, 255)
 
-    elif gradient_type.startswith("slant"):
-        for y in range(height):
-            for x in range(width):
-                ratio = (x + y) / (width + height) if "right" in gradient_type else (width - x + y) / (width + height)
-                idx = int(ratio * (len(rgb_colors) - 1))
-                c1, c2 = rgb_colors[idx], rgb_colors[min(idx + 1, len(rgb_colors) - 1)]
-                local_ratio = (ratio * (len(rgb_colors) - 1)) % 1
-                r = int(c1[0] * (1 - local_ratio) + c2[0] * local_ratio)
-                g = int(c1[1] * (1 - local_ratio) + c2[1] * local_ratio)
-                b = int(c1[2] * (1 - local_ratio) + c2[2] * local_ratio)
-                gradient.putpixel((x, y), (r, g, b, 255))
+    elif gtype == "vertical":
+        for y in range(h):
+            t = y / (h - 1)
+            r = int(c1[0] * (1 - t) + c2[0] * t)
+            g = int(c1[1] * (1 - t) + c2[1] * t)
+            b = int(c1[2] * (1 - t) + c2[2] * t)
+            for x in range(w):
+                px[x, y] = (r, g, b, 255)
 
-    elif gradient_type == "radial":
-        cx, cy = width // 2, height // 2
-        max_dist = math.hypot(width, height)
-        for y in range(height):
-            for x in range(width):
-                dist = math.hypot(x - cx, y - cy)
-                ratio = dist / max_dist
-                idx = int(ratio * (len(rgb_colors) - 1))
-                c1, c2 = rgb_colors[idx], rgb_colors[min(idx + 1, len(rgb_colors) - 1)]
-                local_ratio = (ratio * (len(rgb_colors) - 1)) % 1
-                r = int(c1[0] * (1 - local_ratio) + c2[0] * local_ratio)
-                g = int(c1[1] * (1 - local_ratio) + c2[1] * local_ratio)
-                b = int(c1[2] * (1 - local_ratio) + c2[2] * local_ratio)
-                gradient.putpixel((x, y), (r, g, b, 255))
+    elif gtype == "diagonal":
+        for x in range(w):
+            for y in range(h):
+                t = (x + y) / (w + h - 2)
+                r = int(c1[0] * (1 - t) + c2[0] * t)
+                g = int(c1[1] * (1 - t) + c2[1] * t)
+                b = int(c1[2] * (1 - t) + c2[2] * t)
+                px[x, y] = (r, g, b, 255)
 
-    return gradient
+    elif gtype == "radial":
+        cx, cy = w / 2, h / 2
+        maxd = math.sqrt(cx * cx + cy * cy)
+        for x in range(w):
+            for y in range(h):
+                dx = x - cx
+                dy = y - cy
+                d = math.sqrt(dx * dx + dy * dy)
+                t = min(1.0, d / maxd)
+                r = int(c1[0] * (1 - t) + c2[0] * t)
+                g = int(c1[1] * (1 - t) + c2[1] * t)
+                b = int(c1[2] * (1 - t) + c2[2] * t)
+                px[x, y] = (r, g, b, 255)
+
+    return grad
 
 def render_text_image(
     text: str,
@@ -208,27 +208,40 @@ def render_text_image(
         # Normal solid text fill
         ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
 
-    # ---------------------------------------------------------
-    # 3. GLOW LAST (FIXED)
-    # ---------------------------------------------------------
-    if glow_color and glow_size > 0:
-        print(">>> INSIDE GLOW BLOCK <<<")
+   # ---------------------------------------------------------
+# 3. MULTI-LAYER GLOW (FALLOFF)
+# ---------------------------------------------------------
+if glow_color and glow_size > 0:
+    print(">>> MULTI-LAYER GLOW <<<")
 
-        # 1. Mask
-        glow_mask = Image.new("L", img.size, 0)
-        mask_draw = ImageDraw.Draw(glow_mask)
-        mask_draw.text((x, y), text, font=font_obj, fill=255)
+    glow_layers = []
+    base_mask = Image.new("L", img.size, 0)
+    mask_draw = ImageDraw.Draw(base_mask)
+    mask_draw.text((x, y), text, font=font_obj, fill=255)
 
-        # 2. Blur
-        glow_mask = glow_mask.filter(ImageFilter.GaussianBlur(radius=glow_size))
+    # Three blur radii for falloff
+    radii = [
+        glow_size * 0.25,
+        glow_size * 0.6,
+        glow_size
+    ]
 
-        # 3. Glow layer
-        glow_layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
-        glow_layer.putalpha(glow_mask)
+    # Corresponding opacities
+    alphas = [
+        int(255 * glow_intensity * 1.0),
+        int(255 * glow_intensity * 0.6),
+        int(255 * glow_intensity * 0.3)
+    ]
 
-        # 4. Composite on top
-        img = Image.alpha_composite(img, glow_layer)
+    for r, a in zip(radii, alphas):
+        blurred = base_mask.filter(ImageFilter.GaussianBlur(radius=r))
+        layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
+        layer.putalpha(blurred.point(lambda p: min(p, a)))
+        glow_layers.append(layer)
 
+    # Composite glow layers under text
+    for g in glow_layers:
+        img = Image.alpha_composite(img, g)
     # ---------------------------------------------------------
     # 4. BACKGROUND (if not transparent)
     # ---------------------------------------------------------
