@@ -7,6 +7,13 @@ import io, json, math
 
 app = FastAPI()
 
+from fastapi.staticfiles import StaticFiles
+
+app = FastAPI()
+
+# Serve the fonts folder
+app.mount("/fonts", StaticFiles(directory="fonts"), name="fonts")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
