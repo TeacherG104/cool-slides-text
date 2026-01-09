@@ -171,77 +171,78 @@ def render_text_image(
     width, height = w + padding * 2, h + padding * 2
     x, y = padding, padding
 
-    # Transparent base
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-
-    # ---------------------------------------------------------
-    # 1. OUTLINE FIRST
-    # ---------------------------------------------------------
-    if outline_color and outline_size > 0:
-        outline_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        od = ImageDraw.Draw(outline_img)
-        steps = int(outline_size)
-
-        for dx in range(-steps, steps + 1):
-            for dy in range(-steps, steps + 1):
-                if dx != 0 or dy != 0:
-                    od.text((x + dx, y + dy), text, font=font_obj, fill=outline_color)
-
-        img = Image.alpha_composite(img, outline_img)
-
-    # ---------------------------------------------------------
-    # 2. TEXT FILL (GRADIENT OR SOLID)
-    # ---------------------------------------------------------
-    if gradient_colors and gradient_type != "none":
-        gradient = make_gradient(w, h, gradient_colors, gradient_type)
-        mask = Image.new("L", (w, h), 0)
-        ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
-
-        text_area = Image.composite(
-            gradient,
-            Image.new("RGBA", (w, h), (255, 255, 255, 0)),
-            mask
-        )
-        img.paste(text_area, (x, y), text_area)
-
-    else:
-        # Normal solid text fill
-        ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
-
    # ---------------------------------------------------------
-    # 3. MULTI-LAYER GLOW (FALLOFF)
-    # ---------------------------------------------------------
-    if glow_color and glow_size > 0:
-        print(">>> MULTI-LAYER GLOW <<<")
-    
-        glow_layers = []
-        base_mask = Image.new("L", img.size, 0)
-        mask_draw = ImageDraw.Draw(base_mask)
-        mask_draw.text((x, y), text, font=font_obj, fill=255)
-    
-        # Three blur radii for falloff
-        radii = [
-            glow_size * 0.25,
-            glow_size * 0.6,
-            glow_size
-        ]
-    
-        # Corresponding opacities
-        alphas = [
-            int(255 * glow_intensity * 1.0),
-            int(255 * glow_intensity * 0.6),
-            int(255 * glow_intensity * 0.3)
-        ]
-    
-        for r, a in zip(radii, alphas):
-            blurred = base_mask.filter(ImageFilter.GaussianBlur(radius=r))
-            layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
-            layer.putalpha(blurred.point(lambda p: min(p, a)))
-            glow_layers.append(layer)
-    
-        # Composite glow layers under text
-        for g in glow_layers:
-            img = Image.alpha_composite(img, g)
+# 0. TRANSPARENT BASE
+# ---------------------------------------------------------
+img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+
+
+# ---------------------------------------------------------
+# 1. MULTI-LAYER GLOW (BEHIND EVERYTHING)
+# ---------------------------------------------------------
+if glow_color and glow_size > 0:
+    print(">>> MULTI-LAYER GLOW <<<")
+
+    glow_layers = []
+    base_mask = Image.new("L", img.size, 0)
+    mask_draw = ImageDraw.Draw(base_mask)
+    mask_draw.text((x, y), text, font=font_obj, fill=255)
+
+    radii = [
+        glow_size * 0.25,
+        glow_size * 0.6,
+        glow_size
+    ]
+
+    alphas = [
+        int(255 * glow_intensity * 1.0),
+        int(255 * glow_intensity * 0.6),
+        int(255 * glow_intensity * 0.3)
+    ]
+
+    for r, a in zip(radii, alphas):
+        blurred = base_mask.filter(ImageFilter.GaussianBlur(radius=r))
+        layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
+        layer.putalpha(blurred.point(lambda p: min(p, a)))
+        glow_layers.append(layer)
+
+    for g in glow_layers:
+        img = Image.alpha_composite(img, g)
+
+
+# ---------------------------------------------------------
+# 2. OUTLINE (MIDDLE LAYER)
+# ---------------------------------------------------------
+if outline_color and outline_size > 0:
+    outline_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    od = ImageDraw.Draw(outline_img)
+    steps = int(outline_size)
+
+    for dx in range(-steps, steps + 1):
+        for dy in range(-steps, steps + 1):
+            if dx != 0 or dy != 0:
+                od.text((x + dx, y + dy), text, font=font_obj, fill=outline_color)
+
+    img = Image.alpha_composite(img, outline_img)
+
+
+# ---------------------------------------------------------
+# 3. TEXT FILL (TOP LAYER)
+# ---------------------------------------------------------
+if gradient_colors and gradient_type != "none":
+    gradient = make_gradient(w, h, gradient_colors, gradient_type)
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).text((0, 0), text, font=font_obj, fill=255)
+
+    text_area = Image.composite(
+        gradient,
+        Image.new("RGBA", (w, h), (255, 255, 255, 0)),
+        mask
+    )
+    img.paste(text_area, (x, y), text_area)
+
+else:
+    ImageDraw.Draw(img).text((x, y), text, fill=text_color, font=font_obj)
     # ---------------------------------------------------------
     # 4. BACKGROUND (if not transparent)
     # ---------------------------------------------------------
