@@ -174,37 +174,40 @@ def render_text_image(
         solid = Image.new("RGBA", (width, height), solid_color)
         base_image.paste(solid, (0, 0), mask_crisp)
 
-    # --------------------------------------------------------
-    # 7. Outline (tight, crisp, circular radius)
-    # --------------------------------------------------------
-    if outline_size > 0 and outline_color:
-        radius = int(round(outline_size))
+   # --------------------------------------------------------
+# 7. Outline (tight, crisp, semi-transparent, behind text)
+# --------------------------------------------------------
+if outline_size > 0 and outline_color:
+    radius = int(round(outline_size))
 
-        if radius > 0:
-            expanded = Image.new("L", (width, height), 0)
+    if radius > 0:
+        expanded = Image.new("L", (width, height), 0)
 
-            offsets = [
-                (dx, dy)
-                for dx in range(-radius, radius + 1)
-                for dy in range(-radius, radius + 1)
-                if dx * dx + dy * dy <= radius * radius
-            ]
+        offsets = [
+            (dx, dy)
+            for dx in range(-radius, radius + 1)
+            for dy in range(-radius, radius + 1)
+            if dx * dx + dy * dy <= radius * radius
+        ]
 
-            for dx, dy in offsets:
-                expanded.paste(mask_crisp, (dx, dy), mask_crisp)
+        for dx, dy in offsets:
+            expanded.paste(mask_crisp, (dx, dy), mask_crisp)
 
-            outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-            oc = ImageColor.getrgb(outline_color)
-            op = outline.load()
-            ep = expanded.load()
+        outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        oc = ImageColor.getrgb(outline_color)
+        op = outline.load()
+        ep = expanded.load()
 
-            for y in range(height):
-                for x in range(width):
-                    a = ep[x, y]
-                    if a > 0:
-                        op[x, y] = oc + (a,)
+        for y in range(height):
+            for x in range(width):
+                a = ep[x, y]
+                if a > 0:
+                    # Scale alpha to 50% max (adjustable)
+                    a_scaled = int(a * 0.5)
+                    op[x, y] = oc + (a_scaled,)
 
-            base_image.alpha_composite(outline)
+        # Draw outline *before* text fill
+        base_image = Image.alpha_composite(outline, base_image)
 
     # --------------------------------------------------------
     # 8. Glow (crisp mask, blurred, auto intensity)
@@ -214,7 +217,7 @@ def render_text_image(
         blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
 
         # Auto-scale intensity if not set
-        intensity = glow_intensity if glow_intensity > 0 else min(2.0, size / 60.0)
+        intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
 
         glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         gc = ImageColor.getrgb(glow_color)
