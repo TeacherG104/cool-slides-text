@@ -1,5 +1,7 @@
 import io
+import os
 import math
+import json
 from typing import List, Optional
 
 from fastapi import FastAPI, Query
@@ -9,125 +11,128 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # =========================================================
-# FASTAPI APP SETUP
+# FASTAPI SETUP
 # =========================================================
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # you can tighten this later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # =========================================================
-# UTILS
+# FONT LOADING (CRITICAL FIX)
+# =========================================================
+
+def resolve_font_path(font_path: str) -> str:
+    """
+    Render.com runs your app from /opt/render/project/src.
+    Sidebar sends paths like /fonts/Pacifico-Regular.ttf.
+    We convert that into an absolute path.
+    """
+    if font_path.startswith("/"):
+        font_path = font_path[1:]
+
+    abs_path = os.path.join(os.getcwd(), font_path)
+
+    if not os.path.exists(abs_path):
+        print(f"[FONT ERROR] Font not found: {abs_path}")
+        return None
+
+    return abs_path
+
+
+def load_font(font_path: str, size: int):
+    resolved = resolve_font_path(font_path)
+    if resolved is None:
+        print("[FONT WARNING] Falling back to default PIL font.")
+        return ImageFont.load_default()
+
+    try:
+        return ImageFont.truetype(resolved, size=size)
+    except Exception as e:
+        print(f"[FONT ERROR] Could not load font {resolved}: {e}")
+        return ImageFont.load_default()
+
+# =========================================================
+# COLOR UTILS
 # =========================================================
 
 def hex_to_rgb(hex_color: str):
-    """Convert #RRGGBB or #RGB to (R, G, B)."""
-    hex_color = hex_color.strip()
-    if hex_color.startswith("#"):
-        hex_color = hex_color[1:]
-
+    hex_color = hex_color.strip().lstrip("#")
     if len(hex_color) == 3:
         hex_color = "".join([c * 2 for c in hex_color])
-
     if len(hex_color) != 6:
         return (255, 255, 255)
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
-    return (r, g, b)
+# =========================================================
+# GRADIENT ENGINE (MULTI-STOP)
+# =========================================================
 
-
-def load_font(font_path: str, size: int) -> ImageFont.FreeTypeFont:
-    try:
-        return ImageFont.truetype(font_path, size=size)
-    except Exception:
-        # Fallback to PIL default if font not found
-        return ImageFont.load_default()
-
-
-def make_multi_stop_gradient(width: int, height: int, colors: List[str], gradient_type: str) -> Image.Image:
-    """
-    Create a multi-stop gradient image of size (width, height).
-
-    colors: list of hex strings, e.g. ["#ff0000", "#00ff00", "#0000ff"].
-    gradient_type: "horizontal", "vertical", "diagonal", "radial"
-    """
+def make_multi_stop_gradient(width: int, height: int, colors: List[str], gradient_type: str):
     if not colors:
         colors = ["#ffffff", "#000000"]
     if len(colors) == 1:
         colors = [colors[0], colors[0]]
 
-    # Convert colors to RGB
-    stops_rgb = [hex_to_rgb(c) for c in colors]
-    num_stops = len(stops_rgb)
+    stops = [hex_to_rgb(c) for c in colors]
+    n = len(stops)
 
     img = Image.new("RGBA", (width, height))
-    pixels = img.load()
+    px = img.load()
 
-    def interp_color(t: float):
-        """Interpolate along the list of color stops for position t in [0, 1]."""
-        if t <= 0:
-            return stops_rgb[0]
-        if t >= 1:
-            return stops_rgb[-1]
-
-        scaled = t * (num_stops - 1)
-        i = int(math.floor(scaled))
-        frac = scaled - i
-
-        c1 = stops_rgb[i]
-        c2 = stops_rgb[i + 1]
-
-        r = int(c1[0] + (c2[0] - c1[0]) * frac)
-        g = int(c1[1] + (c2[1] - c1[1]) * frac)
-        b = int(c1[2] + (c2[2] - c1[2]) * frac)
-        return (r, g, b)
+    def interp(t):
+        if t <= 0: return stops[0]
+        if t >= 1: return stops[-1]
+        scaled = t * (n - 1)
+        i = int(scaled)
+        f = scaled - i
+        c1, c2 = stops[i], stops[i + 1]
+        return (
+            int(c1[0] + (c2[0] - c1[0]) * f),
+            int(c1[1] + (c2[1] - c1[1]) * f),
+            int(c1[2] + (c2[2] - c1[2]) * f),
+        )
 
     for y in range(height):
         for x in range(width):
             if gradient_type == "horizontal":
-                t = x / (width - 1) if width > 1 else 0.0
+                t = x / (width - 1)
             elif gradient_type == "vertical":
-                t = y / (height - 1) if height > 1 else 0.0
+                t = y / (height - 1)
             elif gradient_type == "diagonal":
-                t = (x + y) / (width + height - 2) if (width + height) > 2 else 0.0
+                t = (x + y) / (width + height - 2)
             elif gradient_type == "radial":
-                cx = (width - 1) / 2.0
-                cy = (height - 1) / 2.0
-                dx = x - cx
-                dy = y - cy
-                dist = math.sqrt(dx * dx + dy * dy)
-                max_dist = math.sqrt(cx * cx + cy * cy)
-                t = dist / max_dist if max_dist > 0 else 0.0
-                t = min(max(t, 0.0), 1.0)
+                cx, cy = width / 2, height / 2
+                dist = math.hypot(x - cx, y - cy)
+                maxd = math.hypot(cx, cy)
+                t = dist / maxd
             else:
-                # Fallback to horizontal if unknown type
-                t = x / (width - 1) if width > 1 else 0.0
+                t = x / (width - 1)
 
-            pixels[x, y] = interp_color(t) + (255,)
+            px[x, y] = interp(t) + (255,)
 
     return img
 
+# =========================================================
+# TEXT MEASUREMENT
+# =========================================================
 
-def measure_text_box(text: str, font_obj: ImageFont.FreeTypeFont):
-    """Measure text bounding box using a scratch image."""
-    tmp_img = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
-    d = ImageDraw.Draw(tmp_img)
+def measure_text(text: str, font_obj):
+    tmp = Image.new("RGBA", (10, 10))
+    d = ImageDraw.Draw(tmp)
     bbox = d.textbbox((0, 0), text, font=font_obj)
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
-    return w, h
-
+    return w, h, bbox
 
 # =========================================================
-# CORE RENDER FUNCTION
+# RENDER ENGINE
 # =========================================================
 
 def render_text_image(
@@ -144,61 +149,47 @@ def render_text_image(
     glow_intensity: float,
     outline_color: Optional[str],
     outline_size: float,
-) -> Image.Image:
-    # Load font
+):
     font_obj = load_font(font_path, size)
 
-    # Measure text
-    text_width, text_height = measure_text_box(text, font_obj)
+    text_w, text_h, bbox = measure_text(text, font_obj)
 
-    # Add padding so glow/outline don’t clip
-    padding = max(int(glow_size * 2), int(outline_size * 2), 20)
-    width = text_width + padding * 2
-    height = text_height + padding * 2
+    pad = max(int(glow_size * 2), int(outline_size * 2), 20)
+    W = text_w + pad * 2
+    H = text_h + pad * 2
 
-    # Text position
-    x = padding
-    y = padding
+    x = pad
+    y = pad
 
-    # Base image
-    base_bg = (0, 0, 0, 0) if transparent else hex_to_rgb(background_color) + (255,)
-    img = Image.new("RGBA", (width, height), base_bg)
+    bg = (0, 0, 0, 0) if transparent else hex_to_rgb(background_color) + (255,)
+    img = Image.new("RGBA", (W, H), bg)
 
     # ---------------------------------------------------------
-    # 1. MULTI-LAYER GLOW (BEHIND EVERYTHING)
+    # GLOW (BEHIND)
     # ---------------------------------------------------------
     if glow_color and glow_size > 0 and glow_intensity > 0:
-        glow_layers = []
-        base_mask = Image.new("L", img.size, 0)
-        mask_draw = ImageDraw.Draw(base_mask)
-        mask_draw.text((x, y), text, font=font_obj, fill=255)
+        base_mask = Image.new("L", (W, H), 0)
+        d = ImageDraw.Draw(base_mask)
+        d.text((x, y), text, font=font_obj, fill=255)
 
-        radii = [
-            glow_size * 0.25,
-            glow_size * 0.6,
-            glow_size,
-        ]
-
+        radii = [glow_size * 0.25, glow_size * 0.6, glow_size]
         alphas = [
-            int(255 * glow_intensity * 1.0),
+            int(255 * glow_intensity),
             int(255 * glow_intensity * 0.6),
             int(255 * glow_intensity * 0.3),
         ]
 
         for r, a in zip(radii, alphas):
-            blurred = base_mask.filter(ImageFilter.GaussianBlur(radius=r))
-            layer = Image.new("RGBA", img.size, hex_to_rgb(glow_color) + (0,))
-            layer.putalpha(blurred.point(lambda p: min(p, a)))
-            glow_layers.append(layer)
-
-        for g in glow_layers:
-            img = Image.alpha_composite(img, g)
+            blur = base_mask.filter(ImageFilter.GaussianBlur(r))
+            layer = Image.new("RGBA", (W, H), hex_to_rgb(glow_color) + (0,))
+            layer.putalpha(blur.point(lambda p: min(p, a)))
+            img = Image.alpha_composite(img, layer)
 
     # ---------------------------------------------------------
-    # 2. OUTLINE (MIDDLE LAYER)
+    # OUTLINE (MIDDLE)
     # ---------------------------------------------------------
     if outline_color and outline_size > 0:
-        outline_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        outline_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         od = ImageDraw.Draw(outline_img)
         steps = int(outline_size)
 
@@ -210,31 +201,27 @@ def render_text_image(
         img = Image.alpha_composite(img, outline_img)
 
     # ---------------------------------------------------------
-    # 3. TEXT FILL (TOP LAYER: GRADIENT OR SOLID)
+    # TEXT FILL (TOP)
     # ---------------------------------------------------------
     draw = ImageDraw.Draw(img)
 
-    if gradient_type and gradient_type != "none" and gradient_colors:
-        # Gradient area exactly the size of the text bounding box
-        gradient_img = make_multi_stop_gradient(text_width, text_height, gradient_colors, gradient_type)
+    if gradient_type != "none" and gradient_colors:
+        # exact bbox for mask alignment
+        gx0, gy0, gx1, gy1 = draw.textbbox((x, y), text, font=font_obj)
+        gw = gx1 - gx0
+        gh = gy1 - gy0
 
-        # Mask for the text
-        mask = Image.new("L", (text_width, text_height), 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.text((0, 0), text, font=font_obj, fill=255)
+        gradient_img = make_multi_stop_gradient(gw, gh, gradient_colors, gradient_type)
 
-        text_area = Image.composite(
-            gradient_img,
-            Image.new("RGBA", (text_width, text_height), (0, 0, 0, 0)),
-            mask,
-        )
-        img.paste(text_area, (x, y), text_area)
+        mask = Image.new("L", (gw, gh), 0)
+        md = ImageDraw.Draw(mask)
+        md.text((0, 0), text, font=font_obj, fill=255)
+
+        img.paste(gradient_img, (gx0, gy0), mask)
     else:
-        # Solid text color
         draw.text((x, y), text, font=font_obj, fill=text_color)
 
     return img
-
 
 # =========================================================
 # ENDPOINTS
@@ -252,30 +239,24 @@ def render(
     size: int = Query(120),
     textColor: str = Query("#ffffff"),
     gradientType: str = Query("none"),
-    gradientColors: str = Query("[]"),  # JSON string from client
+    gradientColors: str = Query("[]"),
     transparent: bool = Query(False),
     backgroundColor: str = Query("#000000"),
-    resizeToText: bool = Query(False),  # kept for compatibility, not used here
     glowColor: Optional[str] = Query(None),
     glowSize: float = Query(0.0),
     glowIntensity: float = Query(0.0),
     outlineColor: Optional[str] = Query(None),
     outlineSize: float = Query(0.0),
 ):
-    # Parse gradient colors JSON string safely
-    import json
-
     try:
         colors = json.loads(gradientColors)
         if not isinstance(colors, list):
             colors = []
-    except Exception:
+    except:
         colors = []
 
-    # Normalize colors to strings
     colors = [str(c) for c in colors if c]
 
-    # Render the image
     img = render_text_image(
         text=text,
         font_path=font,
@@ -292,7 +273,6 @@ def render(
         outline_size=outlineSize,
     )
 
-    # Return as PNG
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
