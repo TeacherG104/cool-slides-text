@@ -210,7 +210,7 @@ def render_text_image(
     x0, y0, x1, y1 = d.textbbox((0, 0), text, font=font)
     text_w, text_h = x1 - x0, y1 - y0
 
-    pad = max(20, int(size * 0.25))
+    pad = max(20, int(size * 0.3))  # extra bottom pad
     width = text_w + pad * 2
     height = text_h + pad * 2
 
@@ -228,7 +228,10 @@ def render_text_image(
     # --------------------------------------------------------
     text_mask = Image.new("L", (width, height), 0)
     md = ImageDraw.Draw(text_mask)
-    md.text((pad, pad), text, font=font, fill=255)
+
+    # Center vertically and shift up slightly to avoid clipping
+    text_y = (height - text_h) // 2 - 2
+    md.text((pad, text_y), text, font=font, fill=255)
 
     mask_crisp = text_mask
 
@@ -257,30 +260,58 @@ def render_text_image(
         base_image.paste(solid, (0, 0), mask_crisp)
 
     # --------------------------------------------------------
-    # 7. Outline (crisp)
+    # 7. Outline (crisp, tight radius)
     # --------------------------------------------------------
     if outline_size > 0 and outline_color:
-        outline_layer = create_outline_layer(
-            mask_crisp,
-            outline_color,
-            outline_size
-        )
-        base_image.alpha_composite(outline_layer)
+        radius = int(round(outline_size))
+        expanded = Image.new("L", (width, height), 0)
+        offsets = [(dx, dy) for dx in range(-radius, radius + 1)
+                   for dy in range(-radius, radius + 1)
+                   if abs(dx) + abs(dy) <= radius]
+        for dx, dy in offsets:
+            expanded.paste(mask_crisp, (dx, dy), mask_crisp)
+
+        outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        oc = ImageColor.getrgb(outline_color)
+        op = outline.load()
+        ep = expanded.load()
+        for y in range(height):
+            for x in range(width):
+                a = ep[x, y]
+                if a > 0:
+                    op[x, y] = oc + (a,)
+        base_image.alpha_composite(outline)
 
     # --------------------------------------------------------
-    # 8. Glow (crisp mask, blurred)
+    # 8. Glow (crisp mask, blurred, auto intensity)
     # --------------------------------------------------------
-    if glow_size > 0 and glow_intensity > 0 and glow_color:
-        glow_layer = create_glow_layer(
-            mask_crisp,
-            glow_color,
-            glow_size,
-            glow_intensity
-        )
-        base_image.alpha_composite(glow_layer)
+    if glow_size > 0 and glow_color:
+        radius = max(1.0, float(glow_size))
+        blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
+
+        # Auto-scale intensity if not set
+        intensity = glow_intensity if glow_intensity > 0 else min(2.0, size / 60.0)
+
+        glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        gc = ImageColor.getrgb(glow_color)
+        gp = glow.load()
+        bp = blurred.load()
+        for y in range(height):
+            for x in range(width):
+                a = bp[x, y]
+                if a > 0:
+                    a_scaled = int(max(0, min(255, a * intensity)))
+                    gp[x, y] = gc + (a_scaled,)
+        base_image.alpha_composite(glow)
+
+    # --------------------------------------------------------
+    # 9. Crop to true alpha bounds
+    # --------------------------------------------------------
+    bbox = base_image.getbbox()
+    if bbox:
+        base_image = base_image.crop(bbox)
 
     return base_image
-
 
 # ============================================================
 # ENDPOINTS
