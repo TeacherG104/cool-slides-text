@@ -86,7 +86,7 @@ def make_multi_stop_gradient(w: int, h: int, colors: List[str], gtype: str):
     return img
 
 # ============================================================
-# RENDER ENGINE (Thin‑Font Optimized)
+# RENDER ENGINE (Thin‑Font Optimized + Crisp/Soft Auto Mode)
 # ============================================================
 
 def render_text_image(
@@ -146,11 +146,12 @@ def render_text_image(
     # ============================================================
     # OUTLINE (middle layer)
     # ============================================================
-    if outline_color and outline_size > 0:
+    outline_enabled = outline_color and outline_size > 0
+
+    if outline_enabled:
         outline_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         od = ImageDraw.Draw(outline_img)
 
-        # Thin‑font fix: clamp outline to 20% of font size
         max_outline = max(1, int(size * 0.20))
         steps = min(int(outline_size), max_outline)
 
@@ -161,41 +162,33 @@ def render_text_image(
 
         img = Image.alpha_composite(img, outline_img)
 
-        # ============================================================
-        # TEXT FILL (top layer)
-        # ============================================================
-        d = ImageDraw.Draw(img)
-    
-        # Determine crisp vs soft mode based on outline usage
-        outline_enabled = outline_color and outline_size > 0
-    
-        if gradient_type != "none" and gradient_colors:
-            # Exact bbox
-            gx0, gy0, gx1, gy1 = d.textbbox((x, y), text, font=font)
-            gw, gh = gx1 - gx0, gy1 - gy0
-    
-            # If outline is ON → crisp mode (no expansion)
-            # If outline is OFF → soft mode (expand mask)
-            expand = 0 if outline_enabled else 2
-    
-            gw2, gh2 = gw + expand * 2, gh + expand * 2
-    
-            gradient = make_multi_stop_gradient(gw2, gh2, gradient_colors, gradient_type)
-    
-            # Mask
-            mask = Image.new("L", (gw2, gh2), 0)
-            md = ImageDraw.Draw(mask)
-            md.text((expand, expand), text, font=font, fill=255)
-    
-            # Feather only when outline is OFF
-            if not outline_enabled:
-                mask = mask.filter(ImageFilter.GaussianBlur(1.2))
-    
-            img.paste(gradient, (gx0 - expand, gy0 - expand), mask)
-    
-        else:
-            # Solid color text (always crisp)
-            d.text((x, y), text, font=font, fill=text_color)
+    # ============================================================
+    # TEXT FILL (top layer)
+    # ============================================================
+    d = ImageDraw.Draw(img)
+
+    if gradient_type != "none" and gradient_colors:
+        gx0, gy0, gx1, gy1 = d.textbbox((x, y), text, font=font)
+        gw, gh = gx1 - gx0, gy1 - gy0
+
+        expand = 0 if outline_enabled else 2
+        gw2, gh2 = gw + expand * 2, gh + expand * 2
+
+        gradient = make_multi_stop_gradient(gw2, gh2, gradient_colors, gradient_type)
+
+        mask = Image.new("L", (gw2, gh2), 0)
+        md = ImageDraw.Draw(mask)
+        md.text((expand, expand), text, font=font, fill=255)
+
+        if not outline_enabled:
+            mask = mask.filter(ImageFilter.GaussianBlur(1.2))
+
+        img.paste(gradient, (gx0 - expand, gy0 - expand), mask)
+
+    else:
+        d.text((x, y), text, font=font, fill=text_color)
+
+    return img
 
 # ============================================================
 # ENDPOINTS
@@ -221,9 +214,7 @@ def render(
     outlineColor: Optional[str] = Query(None),
     outlineSize: float = Query(0.0),
 ):
-    # ============================================================
     # SAFETY: handle empty text so preview never crashes
-    # ============================================================
     if not text:
         empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
         buf = io.BytesIO()
@@ -231,7 +222,6 @@ def render(
         buf.seek(0)
         return StreamingResponse(buf, media_type="image/png")
 
-    # Parse gradient colors safely
     try:
         colors = json.loads(gradientColors)
         if not isinstance(colors, list):
@@ -240,7 +230,6 @@ def render(
         colors = []
     colors = [str(c) for c in colors if c]
 
-    # Render the text image
     img = render_text_image(
         text=text,
         font_path=font,
@@ -257,7 +246,6 @@ def render(
         outline_size=outlineSize,
     )
 
-    # Return PNG
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
