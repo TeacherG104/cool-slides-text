@@ -20,7 +20,7 @@ app.add_middleware(
 )
 
 # ============================================================
-# FONT LOADING (Render‑safe)
+# FONT LOADING (Render-safe)
 # ============================================================
 
 def resolve_font_path(font_path: str) -> Optional[str]:
@@ -86,7 +86,7 @@ def make_multi_stop_gradient(w: int, h: int, colors: List[str], gtype: str):
     return img
 
 # ============================================================
-# RENDER ENGINE (Thin‑Font Optimized + Crisp/Soft Auto Mode)
+# RENDER ENGINE (Crisp/Soft + Safe Glow Padding)
 # ============================================================
 
 def render_text_image(
@@ -107,14 +107,24 @@ def render_text_image(
     # Load font
     font = load_font(font_path, size)
 
-    # Measure text
+    # Measure text tight bbox
     tmp = Image.new("RGBA", (10, 10))
     dtmp = ImageDraw.Draw(tmp)
     bbox = dtmp.textbbox((0, 0), text, font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-    # Padding
-    pad = max(int(glow_size * 2), int(outline_size * 2), 20)
+    # Flags for effects
+    glow_enabled = bool(glow_color and glow_size > 0 and glow_intensity > 0)
+    outline_enabled = bool(outline_color and outline_size > 0)
+
+    # Compute padding:
+    # - Glow: safe padding (scaled)
+    # - Outline: tight (just outline_size)
+    # - Minimum: 2px breathing room
+    glow_pad = glow_size * 1.3 if glow_enabled else 0
+    outline_pad = outline_size if outline_enabled else 0
+    pad = max(int(glow_pad), int(outline_pad), 2)
+
     W, H = tw + pad * 2, th + pad * 2
     x, y = pad, pad
 
@@ -125,7 +135,7 @@ def render_text_image(
     # ============================================================
     # GLOW (behind everything)
     # ============================================================
-    if glow_color and glow_size > 0 and glow_intensity > 0:
+    if glow_enabled:
         base_mask = Image.new("L", (W, H), 0)
         d = ImageDraw.Draw(base_mask)
         d.text((x, y), text, font=font, fill=255)
@@ -144,10 +154,8 @@ def render_text_image(
             img = Image.alpha_composite(img, layer)
 
     # ============================================================
-    # OUTLINE (middle layer)
+    # OUTLINE (middle layer, crisp)
     # ============================================================
-    outline_enabled = outline_color and outline_size > 0
-
     if outline_enabled:
         outline_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         od = ImageDraw.Draw(outline_img)
@@ -163,29 +171,38 @@ def render_text_image(
         img = Image.alpha_composite(img, outline_img)
 
     # ============================================================
-    # TEXT FILL (top layer)
+    # TEXT FILL (top layer: crisp or soft)
     # ============================================================
     d = ImageDraw.Draw(img)
 
     if gradient_type != "none" and gradient_colors:
+        # Exact bbox in final image
         gx0, gy0, gx1, gy1 = d.textbbox((x, y), text, font=font)
         gw, gh = gx1 - gx0, gy1 - gy0
 
-        expand = 0 if outline_enabled else 2
+        # Crisp if outline is on, soft if off
+        if outline_enabled:
+            expand = 0
+        else:
+            expand = 2  # small expansion to avoid clipping on thin fonts
+
         gw2, gh2 = gw + expand * 2, gh + expand * 2
 
         gradient = make_multi_stop_gradient(gw2, gh2, gradient_colors, gradient_type)
 
+        # Alpha mask
         mask = Image.new("L", (gw2, gh2), 0)
         md = ImageDraw.Draw(mask)
         md.text((expand, expand), text, font=font, fill=255)
 
+        # Feather only when outline is OFF (soft mode)
         if not outline_enabled:
             mask = mask.filter(ImageFilter.GaussianBlur(1.2))
 
         img.paste(gradient, (gx0 - expand, gy0 - expand), mask)
 
     else:
+        # Solid fill is always crisp
         d.text((x, y), text, font=font, fill=text_color)
 
     return img
@@ -214,7 +231,7 @@ def render(
     outlineColor: Optional[str] = Query(None),
     outlineSize: float = Query(0.0),
 ):
-    # SAFETY: handle empty text so preview never crashes
+    # Handle empty text safely (preview typing, etc.)
     if not text:
         empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
         buf = io.BytesIO()
@@ -222,6 +239,7 @@ def render(
         buf.seek(0)
         return StreamingResponse(buf, media_type="image/png")
 
+    # Parse gradient colors
     try:
         colors = json.loads(gradientColors)
         if not isinstance(colors, list):
