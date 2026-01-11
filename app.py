@@ -91,10 +91,6 @@ def create_gradient_fill(
     return grad.convert("RGBA")
 
 
-# ============================================================
-# CORE RENDER FUNCTION
-# ============================================================
-
 def render_text_image(
     text: str,
     font_path: str,
@@ -124,7 +120,7 @@ def render_text_image(
     x0, y0, x1, y1 = d.textbbox((0, 0), text, font=font)
     text_w, text_h = x1 - x0, y1 - y0
 
-    pad = max(20, int(size * 0.3))  # comfortable padding
+    pad = max(20, int(size * 0.3))
     width = text_w + pad * 2
     height = text_h + pad * 2
 
@@ -138,12 +134,12 @@ def render_text_image(
         base_image = Image.new("RGBA", (width, height), bg)
 
     # --------------------------------------------------------
-    # 4. Crisp text mask (centered, slightly shifted up)
+    # 4. Crisp text mask
     # --------------------------------------------------------
     text_mask = Image.new("L", (width, height), 0)
     md = ImageDraw.Draw(text_mask)
 
-    text_y = (height - text_h) // 2 - 2  # center + small upward shift
+    text_y = (height - text_h) // 2 - 2
     md.text((pad, text_y), text, font=font, fill=255)
 
     mask_crisp = text_mask
@@ -159,7 +155,7 @@ def render_text_image(
         mask_soft = mask_crisp
 
     # --------------------------------------------------------
-    # 6. Text fill: gradient (soft) or solid (crisp)
+    # 6. Text fill
     # --------------------------------------------------------
     if has_gradient:
         grad_img = create_gradient_fill(
@@ -174,79 +170,76 @@ def render_text_image(
         solid = Image.new("RGBA", (width, height), solid_color)
         base_image.paste(solid, (0, 0), mask_crisp)
 
-   # --------------------------------------------------------
-    # 7. Outline (tight, crisp, semi-transparent, behind text)
+    # --------------------------------------------------------
+    # 7. Outline (tight, crisp, semi-transparent)
     # --------------------------------------------------------
     if outline_size > 0 and outline_color:
         radius = int(round(outline_size))
-    
+
         if radius > 0:
             expanded = Image.new("L", (width, height), 0)
-    
+
             offsets = [
                 (dx, dy)
                 for dx in range(-radius, radius + 1)
                 for dy in range(-radius, radius + 1)
                 if dx * dx + dy * dy <= radius * radius
             ]
-    
+
             for dx, dy in offsets:
                 expanded.paste(mask_crisp, (dx, dy), mask_crisp)
-    
+
             outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
             oc = ImageColor.getrgb(outline_color)
             op = outline.load()
             ep = expanded.load()
-    
+
             for y in range(height):
                 for x in range(width):
                     a = ep[x, y]
                     if a > 0:
-                        # Scale alpha to 50% max (adjustable)
                         a_scaled = int(a * 0.5)
                         op[x, y] = oc + (a_scaled,)
-    
-            # Draw outline *before* text fill
+
             base_image = Image.alpha_composite(outline, base_image)
-    
-        # --------------------------------------------------------
-        # 8. Glow (crisp mask, blurred, auto intensity)
-        # --------------------------------------------------------
-        if glow_size > 0 and glow_color:
-            radius = max(1.0, float(glow_size))
-            blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
-    
-            # Auto-scale intensity if not set
-            intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
-    
-            glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-            gc = ImageColor.getrgb(glow_color)
-            gp = glow.load()
-            bp = blurred.load()
-    
-            for y in range(height):
-                for x in range(width):
-                    a = bp[x, y]
-                    if a > 0:
-                        a_scaled = int(max(0, min(255, a * intensity)))
-                        gp[x, y] = gc + (a_scaled,)
-    
-            base_image.alpha_composite(glow)
-    
-        # --------------------------------------------------------
-        # 9. Crop to true alpha bounds (include glow)
-        # --------------------------------------------------------
-        bbox = base_image.getbbox()
-        if bbox:
-            expand = int(glow_size * 2) if glow_size > 0 else 0
-            x0, y0, x1, y1 = bbox
-            x0 = max(0, x0 - expand)
-            y0 = max(0, y0 - expand)
-            x1 = min(width, x1 + expand)
-            y1 = min(height, y1 + expand)
-            base_image = base_image.crop((x0, y0, x1, y1))
-    
-        return base_image
+
+    # --------------------------------------------------------
+    # 8. Glow
+    # --------------------------------------------------------
+    if glow_size > 0 and glow_color:
+        radius = max(1.0, float(glow_size))
+        blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
+
+        intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
+
+        glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        gc = ImageColor.getrgb(glow_color)
+        gp = glow.load()
+        bp = blurred.load()
+
+        for y in range(height):
+            for x in range(width):
+                a = bp[x, y]
+                if a > 0:
+                    a_scaled = int(max(0, min(255, a * intensity)))
+                    gp[x, y] = gc + (a_scaled,)
+
+        base_image.alpha_composite(glow)
+
+    # --------------------------------------------------------
+    # 9. Crop to true alpha bounds
+    # --------------------------------------------------------
+    bbox = base_image.getbbox()
+    if bbox:
+        expand = int(glow_size * 2) if glow_size > 0 else 0
+        x0, y0, x1, y1 = bbox
+        x0 = max(0, x0 - expand)
+        y0 = max(0, y0 - expand)
+        x1 = min(width, x1 + expand)
+        y1 = min(height, y1 + expand)
+        base_image = base_image.crop((x0, y0, x1, y1))
+
+    return base_image
 
 
 # ============================================================
