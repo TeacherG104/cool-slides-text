@@ -54,10 +54,8 @@ def create_gradient_fill(
     if len(colors) == 1:
         colors = [colors[0], colors[0]]
 
-    # Convert colors to RGB tuples
     stops = [ImageColor.getrgb(c) for c in colors]
 
-    # Create 1D gradient
     if gradient_type == "linear-vertical":
         grad = Image.new("RGB", (1, height))
         draw = ImageDraw.Draw(grad)
@@ -94,90 +92,6 @@ def create_gradient_fill(
 
 
 # ============================================================
-# HELPER: OUTLINE LAYER (CRISP)
-# ============================================================
-
-def create_outline_layer(
-    mask_crisp: Image.Image,
-    outline_color: str,
-    outline_size: float
-) -> Image.Image:
-    """
-    Create an outline by expanding the mask and filling with outline_color.
-    """
-    if outline_size <= 0:
-        return Image.new("RGBA", mask_crisp.size, (0, 0, 0, 0))
-
-    w, h = mask_crisp.size
-    color = ImageColor.getrgb(outline_color)
-    outline = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-
-    # Expand mask by drawing it repeatedly offset around the original
-    base = mask_crisp
-    expanded = Image.new("L", (w, h), 0)
-    ed = ImageDraw.Draw(expanded)
-
-    radius = int(max(1, outline_size))
-    for dx in range(-radius, radius + 1):
-        for dy in range(-radius, radius + 1):
-            expanded.paste(base, (dx, dy), base)
-
-    # Fill outline with color where expanded mask has alpha
-    rgba = Image.new("RGBA", (w, h), color + (0,))
-    outline_pixels = outline.load()
-    expanded_pixels = expanded.load()
-    for y in range(h):
-        for x in range(w):
-            a = expanded_pixels[x, y]
-            if a > 0:
-                outline_pixels[x, y] = color + (a,)
-
-    return outline
-
-
-# ============================================================
-# HELPER: GLOW LAYER (CRISP MASK, BLURRED)
-# ============================================================
-
-def create_glow_layer(
-    mask_crisp: Image.Image,
-    glow_color: str,
-    glow_size: float,
-    glow_intensity: float
-) -> Image.Image:
-    """
-    Create a glow by blurring the crisp mask and tinting it with glow_color.
-    glow_size controls blur radius; glow_intensity scales alpha.
-    """
-    if glow_size <= 0 or glow_intensity <= 0:
-        return Image.new("RGBA", mask_crisp.size, (0, 0, 0, 0))
-
-    w, h = mask_crisp.size
-    color = ImageColor.getrgb(glow_color)
-
-    # Blur the mask
-    radius = max(1.0, float(glow_size))
-    blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
-
-    # Apply intensity
-    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    gp = glow.load()
-    bp = blurred.load()
-
-    # Clamp intensity to reasonable range, e.g., 0–3
-    intensity = max(0.0, min(float(glow_intensity), 3.0))
-
-    for y in range(h):
-        for x in range(w):
-            a = bp[x, y]
-            if a > 0:
-                a_scaled = int(max(0, min(255, a * intensity)))
-                gp[x, y] = color + (a_scaled,)
-
-    return glow
-
-
-# ============================================================
 # CORE RENDER FUNCTION
 # ============================================================
 
@@ -210,7 +124,7 @@ def render_text_image(
     x0, y0, x1, y1 = d.textbbox((0, 0), text, font=font)
     text_w, text_h = x1 - x0, y1 - y0
 
-    pad = max(20, int(size * 0.3))  # extra bottom pad
+    pad = max(20, int(size * 0.3))  # comfortable padding
     width = text_w + pad * 2
     height = text_h + pad * 2
 
@@ -224,13 +138,12 @@ def render_text_image(
         base_image = Image.new("RGBA", (width, height), bg)
 
     # --------------------------------------------------------
-    # 4. Crisp text mask
+    # 4. Crisp text mask (centered, slightly shifted up)
     # --------------------------------------------------------
     text_mask = Image.new("L", (width, height), 0)
     md = ImageDraw.Draw(text_mask)
 
-    # Center vertically and shift up slightly to avoid clipping
-    text_y = (height - text_h) // 2 - 2
+    text_y = (height - text_h) // 2 - 2  # center + small upward shift
     md.text((pad, text_y), text, font=font, fill=255)
 
     mask_crisp = text_mask
@@ -238,7 +151,9 @@ def render_text_image(
     # --------------------------------------------------------
     # 5. Soft mask (gradient only)
     # --------------------------------------------------------
-    if gradient_type != "none" and gradient_colors:
+    has_gradient = gradient_type != "none" and bool(gradient_colors)
+
+    if has_gradient:
         mask_soft = mask_crisp.filter(ImageFilter.GaussianBlur(radius=2))
     else:
         mask_soft = mask_crisp
@@ -246,7 +161,7 @@ def render_text_image(
     # --------------------------------------------------------
     # 6. Text fill: gradient (soft) or solid (crisp)
     # --------------------------------------------------------
-    if gradient_type != "none" and gradient_colors:
+    if has_gradient:
         grad_img = create_gradient_fill(
             width,
             height,
@@ -260,37 +175,37 @@ def render_text_image(
         base_image.paste(solid, (0, 0), mask_crisp)
 
     # --------------------------------------------------------
-    # 7. Outline (tight, crisp, pixel-accurate)
+    # 7. Outline (tight, crisp, circular radius)
     # --------------------------------------------------------
     if outline_size > 0 and outline_color:
         radius = int(round(outline_size))
-    
-        # Start with empty mask
-        expanded = Image.new("L", (width, height), 0)
-    
-        # Only offsets within a circle, not a square or diamond
-        offsets = [
-            (dx, dy)
-            for dx in range(-radius, radius + 1)
-            for dy in range(-radius, radius + 1)
-            if dx*dx + dy*dy <= radius*radius
-        ]
-    
-        for dx, dy in offsets:
-            expanded.paste(mask_crisp, (dx, dy), mask_crisp)
-    
-        outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        oc = ImageColor.getrgb(outline_color)
-        op = outline.load()
-        ep = expanded.load()
-    
-        for y in range(height):
-            for x in range(width):
-                a = ep[x, y]
-                if a > 0:
-                    op[x, y] = oc + (a,)
-    
-        base_image.alpha_composite(outline)
+
+        if radius > 0:
+            expanded = Image.new("L", (width, height), 0)
+
+            offsets = [
+                (dx, dy)
+                for dx in range(-radius, radius + 1)
+                for dy in range(-radius, radius + 1)
+                if dx * dx + dy * dy <= radius * radius
+            ]
+
+            for dx, dy in offsets:
+                expanded.paste(mask_crisp, (dx, dy), mask_crisp)
+
+            outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            oc = ImageColor.getrgb(outline_color)
+            op = outline.load()
+            ep = expanded.load()
+
+            for y in range(height):
+                for x in range(width):
+                    a = ep[x, y]
+                    if a > 0:
+                        op[x, y] = oc + (a,)
+
+            base_image.alpha_composite(outline)
+
     # --------------------------------------------------------
     # 8. Glow (crisp mask, blurred, auto intensity)
     # --------------------------------------------------------
@@ -305,12 +220,14 @@ def render_text_image(
         gc = ImageColor.getrgb(glow_color)
         gp = glow.load()
         bp = blurred.load()
+
         for y in range(height):
             for x in range(width):
                 a = bp[x, y]
                 if a > 0:
                     a_scaled = int(max(0, min(255, a * intensity)))
                     gp[x, y] = gc + (a_scaled,)
+
         base_image.alpha_composite(glow)
 
     # --------------------------------------------------------
@@ -318,14 +235,16 @@ def render_text_image(
     # --------------------------------------------------------
     bbox = base_image.getbbox()
     if bbox:
-        # Expand crop by glow radius
-        expand = int(glow_size * 2)
+        expand = int(glow_size * 2) if glow_size > 0 else 0
         x0, y0, x1, y1 = bbox
         x0 = max(0, x0 - expand)
         y0 = max(0, y0 - expand)
         x1 = min(width, x1 + expand)
         y1 = min(height, y1 + expand)
         base_image = base_image.crop((x0, y0, x1, y1))
+
+    return base_image
+
 
 # ============================================================
 # ENDPOINTS
@@ -368,6 +287,12 @@ def render(
     except Exception:
         colors = []
     colors = [str(c) for c in colors if c]
+
+    # Normalize empty strings to None for colors
+    if not glowColor:
+        glowColor = None
+    if not outlineColor:
+        outlineColor = None
 
     img = render_text_image(
         text=text,
