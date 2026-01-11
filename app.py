@@ -95,117 +95,101 @@ def render_text_image(
     size: int,
     text_color: str,
     gradient_type: str,
-    gradient_colors: List[str],
+    gradient_colors: list,
     transparent: bool,
     background_color: str,
-    glow_color: Optional[str],
+    glow_color: str,
     glow_size: float,
     glow_intensity: float,
-    outline_color: Optional[str],
+    outline_color: str,
     outline_size: float,
 ):
-    # Load font
-    font = load_font(font_path, size)
+    # ------------------------------------------------------------
+    # 1. Load font
+    # ------------------------------------------------------------
+    font = ImageFont.truetype(font_path, size)
 
-    # Measure text tight bbox
-    tmp = Image.new("RGBA", (10, 10))
-    dtmp = ImageDraw.Draw(tmp)
-    bbox = dtmp.textbbox((0, 0), text, font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    # ------------------------------------------------------------
+    # 2. Measure text
+    # ------------------------------------------------------------
+    dummy = Image.new("RGBA", (10, 10))
+    d = ImageDraw.Draw(dummy)
+    x0, y0, x1, y1 = d.textbbox((0, 0), text, font=font)
+    text_w, text_h = x1 - x0, y1 - y0
 
-    # Flags for effects
-    glow_enabled = bool(glow_color and glow_size > 0 and glow_intensity > 0)
-    outline_enabled = bool(outline_color and outline_size > 0)
+    pad = max(20, int(size * 0.25))
+    width = text_w + pad * 2
+    height = text_h + pad * 2
 
-    # Compute padding:
-    # - Glow: safe padding (scaled)
-    # - Outline: tight (just outline_size)
-    # - Minimum: 2px breathing room
-    glow_pad = glow_size * 1.3 if glow_enabled else 0
-    outline_pad = outline_size if outline_enabled else 0
-    pad = max(int(glow_pad), int(outline_pad), 2)
-
-    W, H = tw + pad * 2, th + pad * 2
-    x, y = pad, pad
-
-    # Background
-    bg = (0, 0, 0, 0) if transparent else hex_to_rgb(background_color) + (255,)
-    img = Image.new("RGBA", (W, H), bg)
-
-    # ============================================================
-    # GLOW (behind everything)
-    # ============================================================
-    if glow_enabled:
-        base_mask = Image.new("L", (W, H), 0)
-        d = ImageDraw.Draw(base_mask)
-        d.text((x, y), text, font=font, fill=255)
-
-        radii = [glow_size * 0.25, glow_size * 0.6, glow_size]
-        alphas = [
-            int(255 * glow_intensity),
-            int(255 * glow_intensity * 0.6),
-            int(255 * glow_intensity * 0.3),
-        ]
-
-        for r, a in zip(radii, alphas):
-            blur = base_mask.filter(ImageFilter.GaussianBlur(r))
-            layer = Image.new("RGBA", (W, H), hex_to_rgb(glow_color) + (0,))
-            layer.putalpha(blur.point(lambda p: min(p, a)))
-            img = Image.alpha_composite(img, layer)
-
-    # ============================================================
-    # OUTLINE (middle layer, crisp)
-    # ============================================================
-    if outline_enabled:
-        outline_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        od = ImageDraw.Draw(outline_img)
-
-        max_outline = max(1, int(size * 0.20))
-        steps = min(int(outline_size), max_outline)
-
-        for dx in range(-steps, steps + 1):
-            for dy in range(-steps, steps + 1):
-                if dx != 0 or dy != 0:
-                    od.text((x + dx, y + dy), text, font=font, fill=outline_color)
-
-        img = Image.alpha_composite(img, outline_img)
-
-    # ============================================================
-    # TEXT FILL (top layer: crisp or soft)
-    # ============================================================
-    d = ImageDraw.Draw(img)
-
-    if gradient_type != "none" and gradient_colors:
-        # Exact bbox in final image
-        gx0, gy0, gx1, gy1 = d.textbbox((x, y), text, font=font)
-        gw, gh = gx1 - gx0, gy1 - gy0
-
-        # Crisp if outline is on, soft if off
-        if outline_enabled:
-            expand = 0
-        else:
-            expand = 2  # small expansion to avoid clipping on thin fonts
-
-        gw2, gh2 = gw + expand * 2, gh + expand * 2
-
-        gradient = make_multi_stop_gradient(gw2, gh2, gradient_colors, gradient_type)
-
-        # Alpha mask
-        mask = Image.new("L", (gw2, gh2), 0)
-        md = ImageDraw.Draw(mask)
-        md.text((expand, expand), text, font=font, fill=255)
-
-        # Feather only when outline is OFF (soft mode)
-        if not outline_enabled:
-            mask = mask.filter(ImageFilter.GaussianBlur(1.2))
-
-        img.paste(gradient, (gx0 - expand, gy0 - expand), mask)
-
+    # ------------------------------------------------------------
+    # 3. Create base image
+    # ------------------------------------------------------------
+    if transparent:
+        base_image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     else:
-        # Solid fill is always crisp
-        d.text((x, y), text, font=font, fill=text_color)
+        bg = ImageColor.getrgb(background_color)
+        base_image = Image.new("RGBA", (width, height), bg)
 
-    return img
+    # ------------------------------------------------------------
+    # 4. Create crisp text mask
+    # ------------------------------------------------------------
+    text_mask = Image.new("L", (width, height), 0)
+    md = ImageDraw.Draw(text_mask)
+    md.text((pad, pad), text, font=font, fill=255)
+
+    mask_crisp = text_mask  # no blur
+
+    # ------------------------------------------------------------
+    # 5. Create soft mask (gradient only)
+    # ------------------------------------------------------------
+    if gradient_type != "none":
+        mask_soft = mask_crisp.filter(ImageFilter.GaussianBlur(radius=2))
+    else:
+        mask_soft = mask_crisp
+
+    # ------------------------------------------------------------
+    # 6. Apply gradient OR solid fill
+    # ------------------------------------------------------------
+    if gradient_type != "none":
+        gradient_img = create_gradient_fill(
+            width,
+            height,
+            gradient_type,
+            gradient_colors
+        )
+        base_image.paste(gradient_img, (0, 0), mask_soft)
+    else:
+        solid = Image.new("RGBA", (width, height), text_color)
+        base_image.paste(solid, (0, 0), mask_crisp)
+
+    # ------------------------------------------------------------
+    # 7. Outline (crisp)
+    # ------------------------------------------------------------
+    if outline_size > 0 and outline_color:
+        outline_layer = create_outline_layer(
+            mask_crisp,
+            outline_color,
+            outline_size
+        )
+        base_image.alpha_composite(outline_layer)
+
+    # ------------------------------------------------------------
+    # 8. Glow (crisp)
+    # ------------------------------------------------------------
+    if glow_size > 0 and glow_intensity > 0 and glow_color:
+        glow_layer = create_glow_layer(
+            mask_crisp,
+            glow_color,
+            glow_size,
+            glow_intensity
+        )
+        base_image.alpha_composite(glow_layer)
+
+    # ------------------------------------------------------------
+    # 9. Return final image
+    # ------------------------------------------------------------
+    return base_image
+
 
 # ============================================================
 # ENDPOINTS
