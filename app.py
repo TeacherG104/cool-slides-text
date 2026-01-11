@@ -260,28 +260,37 @@ def render_text_image(
         base_image.paste(solid, (0, 0), mask_crisp)
 
     # --------------------------------------------------------
-    # 7. Outline (crisp, tight radius)
+    # 7. Outline (tight, crisp, pixel-accurate)
     # --------------------------------------------------------
     if outline_size > 0 and outline_color:
         radius = int(round(outline_size))
+    
+        # Start with empty mask
         expanded = Image.new("L", (width, height), 0)
-        offsets = [(dx, dy) for dx in range(-radius, radius + 1)
-                   for dy in range(-radius, radius + 1)
-                   if abs(dx) + abs(dy) <= radius]
+    
+        # Only offsets within a circle, not a square or diamond
+        offsets = [
+            (dx, dy)
+            for dx in range(-radius, radius + 1)
+            for dy in range(-radius, radius + 1)
+            if dx*dx + dy*dy <= radius*radius
+        ]
+    
         for dx, dy in offsets:
             expanded.paste(mask_crisp, (dx, dy), mask_crisp)
-
+    
         outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         oc = ImageColor.getrgb(outline_color)
         op = outline.load()
         ep = expanded.load()
+    
         for y in range(height):
             for x in range(width):
                 a = ep[x, y]
                 if a > 0:
                     op[x, y] = oc + (a,)
+    
         base_image.alpha_composite(outline)
-
     # --------------------------------------------------------
     # 8. Glow (crisp mask, blurred, auto intensity)
     # --------------------------------------------------------
@@ -305,13 +314,18 @@ def render_text_image(
         base_image.alpha_composite(glow)
 
     # --------------------------------------------------------
-    # 9. Crop to true alpha bounds
+    # 9. Crop to true alpha bounds (include glow)
     # --------------------------------------------------------
     bbox = base_image.getbbox()
     if bbox:
-        base_image = base_image.crop(bbox)
-
-    return base_image
+        # Expand crop by glow radius
+        expand = int(glow_size * 2)
+        x0, y0, x1, y1 = bbox
+        x0 = max(0, x0 - expand)
+        y0 = max(0, y0 - expand)
+        x1 = min(width, x1 + expand)
+        y1 = min(height, y1 + expand)
+        base_image = base_image.crop((x0, y0, x1, y1))
 
 # ============================================================
 # ENDPOINTS
