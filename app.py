@@ -1,92 +1,184 @@
-import io, os, math, json
-from typing import List, Optional
+import io
+import os
+import json
+from typing import Optional, List
+from urllib.parse import unquote
+
 from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse, PlainTextResponse
-from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageColor
 
 # ============================================================
-# FASTAPI + CORS
+# APP SETUP
 # ============================================================
 
 app = FastAPI()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # ============================================================
-# FONT LOADING (Render-safe)
+# HELPER: LOAD FONT SAFELY
 # ============================================================
 
-def resolve_font_path(font_path: str) -> Optional[str]:
-    """Convert /fonts/... to absolute path inside Render."""
-    if font_path.startswith("/"):
-        font_path = font_path[1:]
-    abs_path = os.path.join(os.getcwd(), font_path)
-    if not os.path.exists(abs_path):
-        print(f"[FONT ERROR] Missing font: {abs_path}")
-        return None
-    return abs_path
+def resolve_font_path(font_path: str) -> str:
+    """
+    - Decode URL-encoded font names (spaces, commas, etc.)
+    - Map /fonts/... to local filesystem path under project
+    """
+    font_path = unquote(font_path)
 
-def load_font(font_path: str, size: int):
-    resolved = resolve_font_path(font_path)
-    if resolved is None:
-        print("[FONT WARNING] Using fallback font.")
-        return ImageFont.load_default()
-    try:
-        return ImageFont.truetype(resolved, size=size)
-    except Exception as e:
-        print(f"[FONT ERROR] Could not load font: {e}")
-        return ImageFont.load_default()
+    if font_path.startswith("/fonts/"):
+        local_font = font_path.lstrip("/")  # "fonts/HennyPenny-Regular.ttf"
+        font_path = os.path.join(BASE_DIR, local_font)
+
+    return font_path
+
 
 # ============================================================
-# COLOR + GRADIENT UTILITIES
+# HELPER: CREATE GRADIENT FILL
 # ============================================================
 
-def hex_to_rgb(h: str):
-    h = h.strip().lstrip("#")
-    if len(h) == 3:
-        h = "".join([c * 2 for c in h])
-    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+def create_gradient_fill(
+    width: int,
+    height: int,
+    gradient_type: str,
+    colors: List[str]
+) -> Image.Image:
+    """
+    Simple multi-stop linear gradient.
+    gradient_type can be "linear-horizontal", "linear-vertical", or fallback.
+    """
+    if not colors:
+        colors = ["#ffffff", "#000000"]
 
-def make_multi_stop_gradient(w: int, h: int, colors: List[str], gtype: str):
-    stops = [hex_to_rgb(c) for c in colors]
-    n = len(stops)
-    img = Image.new("RGBA", (w, h))
-    px = img.load()
+    if len(colors) == 1:
+        colors = [colors[0], colors[0]]
 
-    def interp(t):
-        t = max(0, min(t, 1))
-        i = int(t * (n - 1))
-        f = t * (n - 1) - i
-        c1, c2 = stops[i], stops[min(i + 1, n - 1)]
-        return tuple(int(c1[j] + (c2[j] - c1[j]) * f) for j in range(3))
+    # Convert colors to RGB tuples
+    stops = [ImageColor.getrgb(c) for c in colors]
+
+    # Create 1D gradient
+    if gradient_type == "linear-vertical":
+        grad = Image.new("RGB", (1, height))
+        draw = ImageDraw.Draw(grad)
+        steps = height
+        for y in range(steps):
+            t = y / max(steps - 1, 1)
+            idx = int(t * (len(stops) - 1))
+            t_local = (t * (len(stops) - 1)) - idx
+            c1 = stops[idx]
+            c2 = stops[min(idx + 1, len(stops) - 1)]
+            r = int(c1[0] + (c2[0] - c1[0]) * t_local)
+            g = int(c1[1] + (c2[1] - c1[1]) * t_local)
+            b = int(c1[2] + (c2[2] - c1[2]) * t_local)
+            draw.point((0, y), (r, g, b))
+        grad = grad.resize((width, height))
+    else:
+        # default horizontal
+        grad = Image.new("RGB", (width, 1))
+        draw = ImageDraw.Draw(grad)
+        steps = width
+        for x in range(steps):
+            t = x / max(steps - 1, 1)
+            idx = int(t * (len(stops) - 1))
+            t_local = (t * (len(stops) - 1)) - idx
+            c1 = stops[idx]
+            c2 = stops[min(idx + 1, len(stops) - 1)]
+            r = int(c1[0] + (c2[0] - c1[0]) * t_local)
+            g = int(c1[1] + (c2[1] - c1[1]) * t_local)
+            b = int(c1[2] + (c2[2] - c1[2]) * t_local)
+            draw.point((x, 0), (r, g, b))
+        grad = grad.resize((width, height))
+
+    return grad.convert("RGBA")
+
+
+# ============================================================
+# HELPER: OUTLINE LAYER (CRISP)
+# ============================================================
+
+def create_outline_layer(
+    mask_crisp: Image.Image,
+    outline_color: str,
+    outline_size: float
+) -> Image.Image:
+    """
+    Create an outline by expanding the mask and filling with outline_color.
+    """
+    if outline_size <= 0:
+        return Image.new("RGBA", mask_crisp.size, (0, 0, 0, 0))
+
+    w, h = mask_crisp.size
+    color = ImageColor.getrgb(outline_color)
+    outline = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+
+    # Expand mask by drawing it repeatedly offset around the original
+    base = mask_crisp
+    expanded = Image.new("L", (w, h), 0)
+    ed = ImageDraw.Draw(expanded)
+
+    radius = int(max(1, outline_size))
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            expanded.paste(base, (dx, dy), base)
+
+    # Fill outline with color where expanded mask has alpha
+    rgba = Image.new("RGBA", (w, h), color + (0,))
+    outline_pixels = outline.load()
+    expanded_pixels = expanded.load()
+    for y in range(h):
+        for x in range(w):
+            a = expanded_pixels[x, y]
+            if a > 0:
+                outline_pixels[x, y] = color + (a,)
+
+    return outline
+
+
+# ============================================================
+# HELPER: GLOW LAYER (CRISP MASK, BLURRED)
+# ============================================================
+
+def create_glow_layer(
+    mask_crisp: Image.Image,
+    glow_color: str,
+    glow_size: float,
+    glow_intensity: float
+) -> Image.Image:
+    """
+    Create a glow by blurring the crisp mask and tinting it with glow_color.
+    glow_size controls blur radius; glow_intensity scales alpha.
+    """
+    if glow_size <= 0 or glow_intensity <= 0:
+        return Image.new("RGBA", mask_crisp.size, (0, 0, 0, 0))
+
+    w, h = mask_crisp.size
+    color = ImageColor.getrgb(glow_color)
+
+    # Blur the mask
+    radius = max(1.0, float(glow_size))
+    blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
+
+    # Apply intensity
+    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    gp = glow.load()
+    bp = blurred.load()
+
+    # Clamp intensity to reasonable range, e.g., 0–3
+    intensity = max(0.0, min(float(glow_intensity), 3.0))
 
     for y in range(h):
         for x in range(w):
-            if gtype == "horizontal":
-                t = x / (w - 1)
-            elif gtype == "vertical":
-                t = y / (h - 1)
-            elif gtype == "diagonal":
-                t = (x + y) / (w + h - 2)
-            elif gtype == "radial":
-                cx, cy = w / 2, h / 2
-                dist = math.hypot(x - cx, y - cy)
-                maxd = math.hypot(cx, cy)
-                t = dist / maxd
-            else:
-                t = x / (w - 1)
-            px[x, y] = interp(t) + (255,)
-    return img
+            a = bp[x, y]
+            if a > 0:
+                a_scaled = int(max(0, min(255, a * intensity)))
+                gp[x, y] = color + (a_scaled,)
+
+    return glow
+
 
 # ============================================================
-# RENDER ENGINE (Crisp/Soft + Safe Glow Padding)
+# CORE RENDER FUNCTION
 # ============================================================
 
 def render_text_image(
@@ -95,23 +187,24 @@ def render_text_image(
     size: int,
     text_color: str,
     gradient_type: str,
-    gradient_colors: list,
+    gradient_colors: List[str],
     transparent: bool,
     background_color: str,
-    glow_color: str,
+    glow_color: Optional[str],
     glow_size: float,
     glow_intensity: float,
-    outline_color: str,
+    outline_color: Optional[str],
     outline_size: float,
-):
-    # ------------------------------------------------------------
-    # 1. Load font
-    # ------------------------------------------------------------
+) -> Image.Image:
+    # --------------------------------------------------------
+    # 1. Resolve font path & load font
+    # --------------------------------------------------------
+    font_path = resolve_font_path(font_path)
     font = ImageFont.truetype(font_path, size)
 
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
     # 2. Measure text
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
     dummy = Image.new("RGBA", (10, 10))
     d = ImageDraw.Draw(dummy)
     x0, y0, x1, y1 = d.textbbox((0, 0), text, font=font)
@@ -121,50 +214,51 @@ def render_text_image(
     width = text_w + pad * 2
     height = text_h + pad * 2
 
-    # ------------------------------------------------------------
-    # 3. Create base image
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
+    # 3. Base image
+    # --------------------------------------------------------
     if transparent:
         base_image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     else:
         bg = ImageColor.getrgb(background_color)
         base_image = Image.new("RGBA", (width, height), bg)
 
-    # ------------------------------------------------------------
-    # 4. Create crisp text mask
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
+    # 4. Crisp text mask
+    # --------------------------------------------------------
     text_mask = Image.new("L", (width, height), 0)
     md = ImageDraw.Draw(text_mask)
     md.text((pad, pad), text, font=font, fill=255)
 
-    mask_crisp = text_mask  # no blur
+    mask_crisp = text_mask
 
-    # ------------------------------------------------------------
-    # 5. Create soft mask (gradient only)
-    # ------------------------------------------------------------
-    if gradient_type != "none":
+    # --------------------------------------------------------
+    # 5. Soft mask (gradient only)
+    # --------------------------------------------------------
+    if gradient_type != "none" and gradient_colors:
         mask_soft = mask_crisp.filter(ImageFilter.GaussianBlur(radius=2))
     else:
         mask_soft = mask_crisp
 
-    # ------------------------------------------------------------
-    # 6. Apply gradient OR solid fill
-    # ------------------------------------------------------------
-    if gradient_type != "none":
-        gradient_img = create_gradient_fill(
+    # --------------------------------------------------------
+    # 6. Text fill: gradient (soft) or solid (crisp)
+    # --------------------------------------------------------
+    if gradient_type != "none" and gradient_colors:
+        grad_img = create_gradient_fill(
             width,
             height,
             gradient_type,
             gradient_colors
         )
-        base_image.paste(gradient_img, (0, 0), mask_soft)
+        base_image.paste(grad_img, (0, 0), mask_soft)
     else:
-        solid = Image.new("RGBA", (width, height), text_color)
+        solid_color = ImageColor.getrgb(text_color)
+        solid = Image.new("RGBA", (width, height), solid_color)
         base_image.paste(solid, (0, 0), mask_crisp)
 
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
     # 7. Outline (crisp)
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
     if outline_size > 0 and outline_color:
         outline_layer = create_outline_layer(
             mask_crisp,
@@ -173,9 +267,9 @@ def render_text_image(
         )
         base_image.alpha_composite(outline_layer)
 
-    # ------------------------------------------------------------
-    # 8. Glow (crisp)
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
+    # 8. Glow (crisp mask, blurred)
+    # --------------------------------------------------------
     if glow_size > 0 and glow_intensity > 0 and glow_color:
         glow_layer = create_glow_layer(
             mask_crisp,
@@ -185,9 +279,6 @@ def render_text_image(
         )
         base_image.alpha_composite(glow_layer)
 
-    # ------------------------------------------------------------
-    # 9. Return final image
-    # ------------------------------------------------------------
     return base_image
 
 
@@ -198,6 +289,7 @@ def render_text_image(
 @app.get("/ping", response_class=PlainTextResponse)
 def ping():
     return "pong"
+
 
 @app.get("/render")
 def render(
@@ -215,7 +307,7 @@ def render(
     outlineColor: Optional[str] = Query(None),
     outlineSize: float = Query(0.0),
 ):
-    # Handle empty text safely (preview typing, etc.)
+    # Handle empty text safely
     if not text:
         empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
         buf = io.BytesIO()
@@ -228,7 +320,7 @@ def render(
         colors = json.loads(gradientColors)
         if not isinstance(colors, list):
             colors = []
-    except:
+    except Exception:
         colors = []
     colors = [str(c) for c in colors if c]
 
