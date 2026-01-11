@@ -175,78 +175,78 @@ def render_text_image(
         base_image.paste(solid, (0, 0), mask_crisp)
 
    # --------------------------------------------------------
-# 7. Outline (tight, crisp, semi-transparent, behind text)
-# --------------------------------------------------------
-if outline_size > 0 and outline_color:
-    radius = int(round(outline_size))
-
-    if radius > 0:
-        expanded = Image.new("L", (width, height), 0)
-
-        offsets = [
-            (dx, dy)
-            for dx in range(-radius, radius + 1)
-            for dy in range(-radius, radius + 1)
-            if dx * dx + dy * dy <= radius * radius
-        ]
-
-        for dx, dy in offsets:
-            expanded.paste(mask_crisp, (dx, dy), mask_crisp)
-
-        outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        oc = ImageColor.getrgb(outline_color)
-        op = outline.load()
-        ep = expanded.load()
-
-        for y in range(height):
-            for x in range(width):
-                a = ep[x, y]
-                if a > 0:
-                    # Scale alpha to 50% max (adjustable)
-                    a_scaled = int(a * 0.5)
-                    op[x, y] = oc + (a_scaled,)
-
-        # Draw outline *before* text fill
-        base_image = Image.alpha_composite(outline, base_image)
-
+    # 7. Outline (tight, crisp, semi-transparent, behind text)
     # --------------------------------------------------------
-    # 8. Glow (crisp mask, blurred, auto intensity)
-    # --------------------------------------------------------
-    if glow_size > 0 and glow_color:
-        radius = max(1.0, float(glow_size))
-        blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
-
-        # Auto-scale intensity if not set
-        intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
-
-        glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        gc = ImageColor.getrgb(glow_color)
-        gp = glow.load()
-        bp = blurred.load()
-
-        for y in range(height):
-            for x in range(width):
-                a = bp[x, y]
-                if a > 0:
-                    a_scaled = int(max(0, min(255, a * intensity)))
-                    gp[x, y] = gc + (a_scaled,)
-
-        base_image.alpha_composite(glow)
-
-    # --------------------------------------------------------
-    # 9. Crop to true alpha bounds (include glow)
-    # --------------------------------------------------------
-    bbox = base_image.getbbox()
-    if bbox:
-        expand = int(glow_size * 2) if glow_size > 0 else 0
-        x0, y0, x1, y1 = bbox
-        x0 = max(0, x0 - expand)
-        y0 = max(0, y0 - expand)
-        x1 = min(width, x1 + expand)
-        y1 = min(height, y1 + expand)
-        base_image = base_image.crop((x0, y0, x1, y1))
-
-    return base_image
+    if outline_size > 0 and outline_color:
+        radius = int(round(outline_size))
+    
+        if radius > 0:
+            expanded = Image.new("L", (width, height), 0)
+    
+            offsets = [
+                (dx, dy)
+                for dx in range(-radius, radius + 1)
+                for dy in range(-radius, radius + 1)
+                if dx * dx + dy * dy <= radius * radius
+            ]
+    
+            for dx, dy in offsets:
+                expanded.paste(mask_crisp, (dx, dy), mask_crisp)
+    
+            outline = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            oc = ImageColor.getrgb(outline_color)
+            op = outline.load()
+            ep = expanded.load()
+    
+            for y in range(height):
+                for x in range(width):
+                    a = ep[x, y]
+                    if a > 0:
+                        # Scale alpha to 50% max (adjustable)
+                        a_scaled = int(a * 0.5)
+                        op[x, y] = oc + (a_scaled,)
+    
+            # Draw outline *before* text fill
+            base_image = Image.alpha_composite(outline, base_image)
+    
+        # --------------------------------------------------------
+        # 8. Glow (crisp mask, blurred, auto intensity)
+        # --------------------------------------------------------
+        if glow_size > 0 and glow_color:
+            radius = max(1.0, float(glow_size))
+            blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
+    
+            # Auto-scale intensity if not set
+            intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
+    
+            glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            gc = ImageColor.getrgb(glow_color)
+            gp = glow.load()
+            bp = blurred.load()
+    
+            for y in range(height):
+                for x in range(width):
+                    a = bp[x, y]
+                    if a > 0:
+                        a_scaled = int(max(0, min(255, a * intensity)))
+                        gp[x, y] = gc + (a_scaled,)
+    
+            base_image.alpha_composite(glow)
+    
+        # --------------------------------------------------------
+        # 9. Crop to true alpha bounds (include glow)
+        # --------------------------------------------------------
+        bbox = base_image.getbbox()
+        if bbox:
+            expand = int(glow_size * 2) if glow_size > 0 else 0
+            x0, y0, x1, y1 = bbox
+            x0 = max(0, x0 - expand)
+            y0 = max(0, y0 - expand)
+            x1 = min(width, x1 + expand)
+            y1 = min(height, y1 + expand)
+            base_image = base_image.crop((x0, y0, x1, y1))
+    
+        return base_image
 
 
 # ============================================================
