@@ -210,17 +210,28 @@ def render(
     text: str = Query("Hello"),
     font: str = Query("/fonts/Pacifico-Regular.ttf"),
     size: int = Query(120),
-    textColor: str = Query("#ffffff"),
+    textColor: str = Query("#000000"),
     gradientType: str = Query("none"),
     gradientColors: str = Query("[]"),
     transparent: bool = Query(False),
-    backgroundColor: str = Query("#000000"),
+    backgroundColor: str = Query("#ffffff"),
     glowColor: Optional[str] = Query(None),
     glowSize: float = Query(0.0),
     glowIntensity: float = Query(0.0),
     outlineColor: Optional[str] = Query(None),
     outlineSize: float = Query(0.0),
 ):
+    # ============================================================
+    # SAFETY: handle empty text so preview never crashes
+    # ============================================================
+    if not text:
+        empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        empty.save(buf, format="PNG")
+        buf.seek(0)
+        return StreamingResponse(buf, media_type="image/png")
+
+    # Parse gradient colors safely
     try:
         colors = json.loads(gradientColors)
         if not isinstance(colors, list):
@@ -229,6 +240,7 @@ def render(
         colors = []
     colors = [str(c) for c in colors if c]
 
+    # Render the text image
     img = render_text_image(
         text=text,
         font_path=font,
@@ -245,6 +257,7 @@ def render(
         outline_size=outlineSize,
     )
 
+    # Return PNG
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
