@@ -89,7 +89,9 @@ def create_gradient_fill(
         grad = grad.resize((width, height))
 
     return grad.convert("RGBA")
-
+# --------------------------------------------------------
+# Render engine
+# --------------------------------------------------------
 
 def render_text_image(
     text: str,
@@ -145,14 +147,12 @@ def render_text_image(
     mask_crisp = text_mask
 
     # --------------------------------------------------------
-    # 5. Soft mask (gradient only)
+    # 5. Soft mask (only if glow is active)
     # --------------------------------------------------------
     has_gradient = gradient_type != "none" and bool(gradient_colors)
+    use_soft_mask = glow_size > 0
 
-    if has_gradient:
-        mask_soft = mask_crisp.filter(ImageFilter.GaussianBlur(radius=2))
-    else:
-        mask_soft = mask_crisp
+    mask_soft = mask_crisp.filter(ImageFilter.GaussianBlur(radius=2)) if use_soft_mask else mask_crisp
 
     # --------------------------------------------------------
     # 6. Text fill
@@ -227,7 +227,7 @@ def render_text_image(
         base_image.alpha_composite(glow)
 
     # --------------------------------------------------------
-    # 9. Crop to true alpha bounds
+    # 9. Crop to true alpha bounds (include glow)
     # --------------------------------------------------------
     bbox = base_image.getbbox()
     if bbox:
