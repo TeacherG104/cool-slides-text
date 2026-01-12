@@ -150,7 +150,7 @@ def render_text_image(
     mask_crisp = text_mask
 
     # --------------------------------------------------------
-    # 5. Soft mask only when glow is active
+    # 5. Soft mask only when glow is active (for gradient)
     # --------------------------------------------------------
     has_gradient = gradient_type != "none" and bool(gradient_colors)
     use_soft_mask = glow_size > 0
@@ -202,10 +202,9 @@ def render_text_image(
                 for x in range(width):
                     a = ep[x, y]
                     if a > 0:
-                        # 50% opacity outline
                         op[x, y] = oc + (int(a * 0.5),)
 
-            # Outline goes BEHIND text
+            # Outline behind text
             base_image = Image.alpha_composite(outline, base_image)
 
     # --------------------------------------------------------
@@ -213,18 +212,18 @@ def render_text_image(
     # --------------------------------------------------------
     if glow_size > 0 and glow_color:
         radius = float(glow_size)
-    
+
         # No blur at all — crisp glow mask
         blurred = mask_crisp
-    
+
         # Auto-scale intensity if needed
         intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
-    
+
         glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         gc = ImageColor.getrgb(glow_color)
         gp = glow.load()
         bp = blurred.load()
-    
+
         for y in range(height):
             for x in range(width):
                 a = bp[x, y]
@@ -234,24 +233,24 @@ def render_text_image(
                     if a_scaled > 200:
                         a_scaled = 255
                     gp[x, y] = gc + (a_scaled,)
-    
+
         # Glow behind text + outline
         base_image = Image.alpha_composite(glow, base_image)
-    
-        # --------------------------------------------------------
-        # 9. Crop to true alpha bounds
-        # --------------------------------------------------------
-        bbox = base_image.getbbox()
-        if bbox:
-            expand = int(glow_size * 2) if glow_size > 0 else 0
-            x0, y0, x1, y1 = bbox
-            x0 = max(0, x0 - expand)
-            y0 = max(0, y0 - expand)
-            x1 = min(width, x1 + expand)
-            y1 = min(height, y1 + expand)
-            base_image = base_image.crop((x0, y0, x1, y1))
-    
-        return base_image
+
+    # --------------------------------------------------------
+    # 9. Crop to true alpha bounds
+    # --------------------------------------------------------
+    bbox = base_image.getbbox()
+    if bbox:
+        expand = int(glow_size * 2) if glow_size > 0 else 0
+        x0, y0, x1, y1 = bbox
+        x0 = max(0, x0 - expand)
+        y0 = max(0, y0 - expand)
+        x1 = min(width, x1 + expand)
+        y1 = min(height, y1 + expand)
+        base_image = base_image.crop((x0, y0, x1, y1))
+
+    return base_image
 
 
 # ============================================================
