@@ -198,39 +198,31 @@ def render_text_image(
 
             base_image = Image.alpha_composite(outline, base_image)
     # --------------------------------------------------------
-    # 8. Glow (behind text, crisp with smooth falloff)
+    # 8. Glow (fast, smooth halo, no blur)
     # --------------------------------------------------------
     if glow_size > 0 and glow_color:
         radius = int(round(glow_size))
     
         # Step 1: crisp dilation
-        expanded_glow = mask_crisp.filter(ImageFilter.MaxFilter(size=radius * 2 + 1))
-        eg = expanded_glow.load()
-        mc = mask_crisp.load()
+        expanded = mask_crisp.filter(ImageFilter.MaxFilter(size=radius * 2 + 1))
     
-        # Step 2: distance-based falloff
+        # Step 2: distance transform (fast)
+        # Convert mask to binary: 255 = text, 0 = background
+        inv = Image.eval(expanded, lambda p: 255 - p)
+    
+        # Distance transform using built-in filter
+        dist = inv.filter(ImageFilter.GaussianBlur(radius=radius))
+    
+        # Normalize distance to 0–1 fade
+        dist_px = dist.load()
         glow_mask = Image.new("L", (width, height), 0)
         gm = glow_mask.load()
     
         for y in range(height):
             for x in range(width):
-                if eg[x, y] > 0:
-                    # distance to nearest text pixel
-                    # (approximate using Manhattan distance for speed)
-                    min_dist = radius
-                    for dy in range(-radius, radius + 1):
-                        ny = y + dy
-                        if 0 <= ny < height:
-                            for dx in range(-radius, radius + 1):
-                                nx = x + dx
-                                if 0 <= nx < width and mc[nx, ny] > 0:
-                                    dist = abs(dx) + abs(dy)
-                                    if dist < min_dist:
-                                        min_dist = dist
-    
-                    # fade outward: 1.0 near text → 0.0 at radius
-                    fade = max(0.0, 1.0 - (min_dist / radius) ** 3)
-                    gm[x, y] = int(255 * fade)
+                d = dist_px[x, y] / 255.0
+                fade = max(0.0, 1.0 - d)
+                gm[x, y] = int(255 * fade)
     
         # Step 3: apply glow color
         glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
