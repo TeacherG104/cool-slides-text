@@ -199,36 +199,22 @@ def render_text_image(
             base_image = Image.alpha_composite(outline, base_image)
 
     # --------------------------------------------------------
-    # 8. Glow (behind text, NO BLUR, REAL HALO EXPANSION)
+    # 8. Glow (behind text, NO BLUR, FAST HALO EXPANSION)
     # --------------------------------------------------------
     if glow_size > 0 and glow_color:
         radius = int(round(glow_size))
-
-        # Create expanded glow mask (circle dilation)
-        expanded_glow = Image.new("L", (width, height), 0)
-        eg = expanded_glow.load()
-        mc = mask_crisp.load()
-
-        for dy in range(-radius, radius + 1):
-            for dx in range(-radius, radius + 1):
-                if dx * dx + dy * dy <= radius * radius:
-                    for y in range(height):
-                        ny = y + dy
-                        if 0 <= ny < height:
-                            for x in range(width):
-                                nx = x + dx
-                                if 0 <= nx < width:
-                                    if mc[x, y] > 0:
-                                        eg[nx, ny] = max(eg[nx, ny], mc[x, y])
-
+    
+        # Fast dilation using MaxFilter (expands mask outward)
+        expanded_glow = mask_crisp.filter(ImageFilter.MaxFilter(size=radius * 2 + 1))
+    
         # Apply glow color
         glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         gc = ImageColor.getrgb(glow_color)
         gp = glow.load()
         bp = expanded_glow.load()
-
+    
         intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
-
+    
         for y in range(height):
             for x in range(width):
                 a = bp[x, y]
@@ -237,8 +223,21 @@ def render_text_image(
                     if a_scaled > 200:
                         a_scaled = 255
                     gp[x, y] = gc + (a_scaled,)
-
+    
         base_image = Image.alpha_composite(glow, base_image)
+    
+            intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
+    
+            for y in range(height):
+                for x in range(width):
+                    a = bp[x, y]
+                    if a > 0:
+                        a_scaled = int(a * intensity)
+                        if a_scaled > 200:
+                            a_scaled = 255
+                        gp[x, y] = gc + (a_scaled,)
+    
+            base_image = Image.alpha_composite(glow, base_image)
 
     # --------------------------------------------------------
     # 9. Crop to true alpha bounds
