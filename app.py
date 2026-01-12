@@ -225,19 +225,7 @@ def render_text_image(
                     gp[x, y] = gc + (a_scaled,)
     
         base_image = Image.alpha_composite(glow, base_image)
-    
-            intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
-    
-            for y in range(height):
-                for x in range(width):
-                    a = bp[x, y]
-                    if a > 0:
-                        a_scaled = int(a * intensity)
-                        if a_scaled > 200:
-                            a_scaled = 255
-                        gp[x, y] = gc + (a_scaled,)
-    
-            base_image = Image.alpha_composite(glow, base_image)
+
 
     # --------------------------------------------------------
     # 9. Crop to true alpha bounds
