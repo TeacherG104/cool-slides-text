@@ -108,15 +108,9 @@ def render_text_image(
     outline_color: Optional[str],
     outline_size: float,
 ) -> Image.Image:
-    # --------------------------------------------------------
-    # 1. Resolve font path & load font
-    # --------------------------------------------------------
     font_path = resolve_font_path(font_path)
     font = ImageFont.truetype(font_path, size)
 
-    # --------------------------------------------------------
-    # 2. Measure text using baseline metrics
-    # --------------------------------------------------------
     ascent, descent = font.getmetrics()
     text_h = ascent + descent
 
@@ -129,66 +123,31 @@ def render_text_image(
     width = text_w + pad * 2
     height = text_h + pad * 2
 
-    # --------------------------------------------------------
-    # 3. Base image
-    # --------------------------------------------------------
-    if transparent:
-        base_image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    else:
-        bg = ImageColor.getrgb(background_color)
-        base_image = Image.new("RGBA", (width, height), bg)
+    base_image = Image.new("RGBA", (width, height), (0, 0, 0, 0)) if transparent else Image.new("RGBA", (width, height), ImageColor.getrgb(background_color))
 
-    # --------------------------------------------------------
-    # 4. Crisp text mask
-    # --------------------------------------------------------
     text_mask = Image.new("L", (width, height), 0)
     md = ImageDraw.Draw(text_mask)
-
     text_y = (height - text_h) // 2
     md.text((pad, text_y), text, font=font, fill=255)
-
     mask_crisp = text_mask
 
-    # --------------------------------------------------------
-    # 5. Soft mask (only if glow is active)
-    # --------------------------------------------------------
     has_gradient = gradient_type != "none" and bool(gradient_colors)
     use_soft_mask = glow_size > 0
-
     mask_soft = mask_crisp.filter(ImageFilter.GaussianBlur(radius=2)) if use_soft_mask else mask_crisp
 
-    # --------------------------------------------------------
-    # 6. Text fill
-    # --------------------------------------------------------
     if has_gradient:
-        grad_img = create_gradient_fill(
-            width,
-            height,
-            gradient_type,
-            gradient_colors
-        )
+        grad_img = create_gradient_fill(width, height, gradient_type, gradient_colors)
         base_image.paste(grad_img, (0, 0), mask_soft)
     else:
         solid_color = ImageColor.getrgb(text_color)
         solid = Image.new("RGBA", (width, height), solid_color)
         base_image.paste(solid, (0, 0), mask_crisp)
 
-    # --------------------------------------------------------
-    # 7. Outline (tight, crisp, semi-transparent)
-    # --------------------------------------------------------
     if outline_size > 0 and outline_color:
         radius = int(round(outline_size))
-
         if radius > 0:
             expanded = Image.new("L", (width, height), 0)
-
-            offsets = [
-                (dx, dy)
-                for dx in range(-radius, radius + 1)
-                for dy in range(-radius, radius + 1)
-                if dx * dx + dy * dy <= radius * radius
-            ]
-
+            offsets = [(dx, dy) for dx in range(-radius, radius + 1) for dy in range(-radius, radius + 1) if dx * dx + dy * dy <= radius * radius]
             for dx, dy in offsets:
                 expanded.paste(mask_crisp, (dx, dy), mask_crisp)
 
@@ -206,13 +165,9 @@ def render_text_image(
 
             base_image = Image.alpha_composite(outline, base_image)
 
-    # --------------------------------------------------------
-    # 8. Glow (full color near edge, fade outward)
-    # --------------------------------------------------------
     if glow_size > 0 and glow_color:
         radius = max(1.0, float(glow_size))
         blurred = mask_crisp.filter(ImageFilter.GaussianBlur(radius=radius))
-
         intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
 
         glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -231,9 +186,6 @@ def render_text_image(
 
         base_image.alpha_composite(glow)
 
-    # --------------------------------------------------------
-    # 9. Crop to true alpha bounds (include glow)
-    # --------------------------------------------------------
     bbox = base_image.getbbox()
     if bbox:
         expand = int(glow_size * 2) if glow_size > 0 else 0
