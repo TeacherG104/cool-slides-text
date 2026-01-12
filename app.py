@@ -197,34 +197,60 @@ def render_text_image(
                         op[x, y] = oc + (int(a * 0.5),)
 
             base_image = Image.alpha_composite(outline, base_image)
-
     # --------------------------------------------------------
-    # 8. Glow (behind text, NO BLUR, FAST HALO EXPANSION)
+    # 8. Glow (behind text, crisp with smooth falloff)
     # --------------------------------------------------------
     if glow_size > 0 and glow_color:
         radius = int(round(glow_size))
     
-        # Fast dilation using MaxFilter (expands mask outward)
+        # Step 1: crisp dilation
         expanded_glow = mask_crisp.filter(ImageFilter.MaxFilter(size=radius * 2 + 1))
+        eg = expanded_glow.load()
+        mc = mask_crisp.load()
     
-        # Apply glow color
+        # Step 2: distance-based falloff
+        glow_mask = Image.new("L", (width, height), 0)
+        gm = glow_mask.load()
+    
+        for y in range(height):
+            for x in range(width):
+                if eg[x, y] > 0:
+                    # distance to nearest text pixel
+                    # (approximate using Manhattan distance for speed)
+                    min_dist = radius
+                    for dy in range(-radius, radius + 1):
+                        ny = y + dy
+                        if 0 <= ny < height:
+                            for dx in range(-radius, radius + 1):
+                                nx = x + dx
+                                if 0 <= nx < width and mc[nx, ny] > 0:
+                                    dist = abs(dx) + abs(dy)
+                                    if dist < min_dist:
+                                        min_dist = dist
+    
+                    # fade outward: 1.0 near text → 0.0 at radius
+                    fade = max(0.0, 1.0 - (min_dist / radius))
+                    gm[x, y] = int(255 * fade)
+    
+        # Step 3: apply glow color
         glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         gc = ImageColor.getrgb(glow_color)
         gp = glow.load()
-        bp = expanded_glow.load()
+        gm2 = glow_mask.load()
     
         intensity = glow_intensity if glow_intensity > 0 else min(3.0, size / 60.0)
     
         for y in range(height):
             for x in range(width):
-                a = bp[x, y]
+                a = gm2[x, y]
                 if a > 0:
                     a_scaled = int(a * intensity)
-                    if a_scaled > 200:
+                    if a_scaled > 255:
                         a_scaled = 255
                     gp[x, y] = gc + (a_scaled,)
     
         base_image = Image.alpha_composite(glow, base_image)
+   
 
 
     # --------------------------------------------------------
