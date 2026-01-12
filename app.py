@@ -115,12 +115,15 @@ def render_text_image(
     font = ImageFont.truetype(font_path, size)
 
     # --------------------------------------------------------
-    # 2. Measure text
+    # 2. Measure text using baseline metrics
     # --------------------------------------------------------
+    ascent, descent = font.getmetrics()
+    text_h = ascent + descent
+
     dummy = Image.new("RGBA", (10, 10))
     d = ImageDraw.Draw(dummy)
     x0, y0, x1, y1 = d.textbbox((0, 0), text, font=font)
-    text_w, text_h = x1 - x0, y1 - y0
+    text_w = x1 - x0
 
     pad = max(20, int(size * 0.3))
     width = text_w + pad * 2
@@ -141,7 +144,7 @@ def render_text_image(
     text_mask = Image.new("L", (width, height), 0)
     md = ImageDraw.Draw(text_mask)
 
-    text_y = (height - text_h) // 2 - 2
+    text_y = (height - text_h) // 2
     md.text((pad, text_y), text, font=font, fill=255)
 
     mask_crisp = text_mask
@@ -204,7 +207,7 @@ def render_text_image(
             base_image = Image.alpha_composite(outline, base_image)
 
     # --------------------------------------------------------
-    # 8. Glow
+    # 8. Glow (full color near edge, fade outward)
     # --------------------------------------------------------
     if glow_size > 0 and glow_color:
         radius = max(1.0, float(glow_size))
@@ -222,6 +225,8 @@ def render_text_image(
                 a = bp[x, y]
                 if a > 0:
                     a_scaled = int(max(0, min(255, a * intensity)))
+                    if a_scaled > 200:
+                        a_scaled = 255
                     gp[x, y] = gc + (a_scaled,)
 
         base_image.alpha_composite(glow)
