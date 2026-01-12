@@ -229,7 +229,7 @@ def render_text_image(
                                         min_dist = dist
     
                     # fade outward: 1.0 near text → 0.0 at radius
-                    fade = max(0.0, 1.0 - (min_dist / radius))
+                    fade = max(0.0, 1.0 - (min_dist / radius) ** 3)
                     gm[x, y] = int(255 * fade)
     
         # Step 3: apply glow color
